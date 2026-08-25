@@ -1,0 +1,38 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}{{ subject.name }} · E-Learning · {{ brand.school_display }}{% endblock %}
+{% block header_title %}{{ subject.name }}{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-6xl space-y-6">
+  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
+    <a
+      class="inline-flex items-center gap-1.5 text-sm font-medium text-brand transition hover:text-ink-950"
+      href="{% url 'portal:elearning' %}"
+    >
+      <span aria-hidden="true">←</span> All subjects
+    </a>
+    <p class="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ink-400">Subject portal</p>
+    <h2 class="mt-1 font-display text-2xl font-semibold text-ink-950 sm:text-3xl">{{ subject.name }}</h2>
+    <p class="mt-1 text-sm text-ink-600">
+      {{ subject.code }} · {{ student.display_name }}
+      {% if student.class_group %} · {{ student.class_group }}{% endif %}
+    </p>
+    {% if subject.description %}
+    <p class="mt-4 text-sm leading-relaxed text-ink-600">{{ subject.description }}</p>
+    {% endif %}
+  </section>
+
+  <section class="rounded-3xl border border-white/70 bg-white/90 px-5 py-12 text-center shadow-panel backdrop-blur sm:px-8">
+    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-brand">
+      <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+      </svg>
+    </div>
+    <p class="mt-5 font-display text-xl font-semibold text-ink-950">Lessons &amp; resources</p>
+    <p class="mx-auto mt-2 max-w-md text-sm text-ink-600">
+      Online materials for {{ subject.name }} will appear here once they are published in e-learning.
+    </p>
+  </section>
+</div>
+{% endblock %}

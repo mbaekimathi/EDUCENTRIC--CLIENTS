@@ -1,0 +1,116 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}Finances · {{ brand.school_display }}{% endblock %}
+{% block header_title %}Finances{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-6xl space-y-6">
+  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
+    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-ink-400">Fee statement</p>
+    <h2 class="mt-1 font-display text-2xl font-semibold text-ink-950 sm:text-3xl">{{ student.display_name }}</h2>
+    <p class="mt-1 text-sm text-ink-600">
+      {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
+    </p>
+
+    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+      <div class="rounded-2xl bg-ink-950/[0.03] px-4 py-3">
+        <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Charged</p>
+        <p class="mt-1 font-display text-xl font-semibold">KES {{ total_charged|floatformat:2 }}</p>
+      </div>
+      <div class="rounded-2xl bg-ink-950/[0.03] px-4 py-3">
+        <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Paid</p>
+        <p class="mt-1 font-display text-xl font-semibold">KES {{ total_paid|floatformat:2 }}</p>
+      </div>
+      <div class="rounded-2xl bg-brand-soft px-4 py-3">
+        <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Balance</p>
+        <p class="mt-1 font-display text-xl font-semibold text-brand">KES {{ balance|floatformat:2 }}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
+    <div class="border-b border-ink-950/8 px-5 py-4 sm:px-7">
+      <h3 class="font-display text-lg font-semibold text-ink-950">Charges</h3>
+    </div>
+    {% if charges %}
+    <div class="overflow-x-auto">
+      <table class="portal-table w-full min-w-[44rem] text-left text-sm">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Period</th>
+            <th>Amount</th>
+            <th>Paid</th>
+            <th>Balance</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for charge in charges %}
+          <tr>
+            <td>
+              <span class="font-semibold text-ink-950">{{ charge.title }}</span>
+              <span class="mt-0.5 block text-xs text-ink-400">{{ charge.category.name }}</span>
+            </td>
+            <td class="text-ink-600">
+              {% if charge.academic_year or charge.term %}
+                {{ charge.academic_year }}{% if charge.academic_year and charge.term %} · {% endif %}{{ charge.term }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td class="font-semibold">{{ charge.amount|floatformat:2 }}</td>
+            <td>{{ charge.amount_paid|floatformat:2 }}</td>
+            <td class="font-semibold">{{ charge.balance|floatformat:2 }}</td>
+            <td><span class="att-pill is-grade">{{ charge.get_status_display }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="px-5 py-10 text-center sm:px-8">
+      <p class="font-display text-lg font-semibold text-ink-950">No fee charges yet</p>
+      <p class="mt-2 text-sm text-ink-600">When the accounts office posts fees for {{ student.display_name }}, they will appear here.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
+    <div class="border-b border-ink-950/8 px-5 py-4 sm:px-7">
+      <h3 class="font-display text-lg font-semibold text-ink-950">Payments</h3>
+    </div>
+    {% if payments %}
+    <div class="overflow-x-auto">
+      <table class="portal-table w-full min-w-[36rem] text-left text-sm">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Method</th>
+            <th>Reference</th>
+            <th>Against</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for payment in payments %}
+          <tr>
+            <td class="font-semibold">{{ payment.received_at|date:"j M Y, H:i" }}</td>
+            <td class="font-semibold">KES {{ payment.amount|floatformat:2 }}</td>
+            <td>{{ payment.get_method_display }}</td>
+            <td>{{ payment.reference|default:"—" }}</td>
+            <td>{% if payment.charge %}{{ payment.charge.title }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="px-5 py-10 text-center sm:px-8">
+      <p class="font-display text-lg font-semibold text-ink-950">No payments recorded</p>
+      <p class="mt-2 text-sm text-ink-600">Receipts for this learner will list here after payment is recorded in accounts.</p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

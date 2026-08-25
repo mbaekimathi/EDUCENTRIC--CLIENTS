@@ -1,0 +1,76 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="{% if portal_role == 'parent' %}theme-parent{% else %}theme-student{% endif %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="{% if portal_role == 'parent' %}#0f766e{% else %}{{ brand.primary_color }}{% endif %}">
+  <title>{% block title %}{{ brand.school_display }} Portal{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  {% if portal_role == 'parent' %}
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  {% else %}
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+  {% endif %}
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              {% if portal_role == 'parent' %}
+              DEFAULT: '#0f766e',
+              soft: 'color-mix(in srgb, #0f766e 12%, white)',
+              deep: '#115e59',
+              {% else %}
+              DEFAULT: '{{ brand.primary_color }}',
+              soft: 'color-mix(in srgb, {{ brand.primary_color }} 12%, white)',
+              deep: 'color-mix(in srgb, {{ brand.primary_color }} 78%, black)',
+              {% endif %}
+            },
+            ink: {
+              950: '#0f1419',
+              800: '#1c2430',
+              600: '#4a5568',
+              400: '#8b95a5',
+            }
+          },
+          fontFamily: {
+            {% if portal_role == 'parent' %}
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            display: ['"Instrument Serif"', 'Georgia', 'serif'],
+            {% else %}
+            sans: ['Manrope', 'system-ui', 'sans-serif'],
+            display: ['"Source Serif 4"', 'Georgia', 'serif'],
+            {% endif %}
+          },
+          boxShadow: {
+            panel: '0 24px 60px -28px rgba(15, 20, 25, 0.45)',
+            glow: '0 18px 50px -24px rgba(15, 118, 110, 0.55)',
+          }
+        }
+      }
+    }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="{% static 'css/portal.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-dvh font-sans text-ink-950 antialiased bg-canvas {% if portal_role == 'parent' %}theme-parent{% else %}theme-student{% endif %}">
+  {% if messages %}
+  <div class="fixed top-4 inset-x-4 z-50 mx-auto max-w-lg space-y-2 pointer-events-none" role="status">
+    {% for message in messages %}
+    <div class="pointer-events-auto rounded-xl border border-white/40 bg-white/95 px-4 py-3 text-sm shadow-panel backdrop-blur message-toast"
+         x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 4200)"
+         x-transition.opacity>
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% block body %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,74 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}Timetable · {{ brand.school_display }}{% endblock %}
+{% block header_title %}Timetable{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-6xl space-y-6">
+  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-ink-400">Weekly learning schedule</p>
+        <h2 class="mt-1 font-display text-2xl font-semibold text-ink-950 sm:text-3xl">{{ student.display_name }}</h2>
+        <p class="mt-1 text-sm text-ink-600">
+          {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
+          {% if academic_class %} · {{ academic_class.code }}{% endif %}
+        </p>
+      </div>
+      {% if rows %}
+      <p class="text-xs text-ink-400">Subject codes · teacher title + surname</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if rows %}
+  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/95 shadow-panel backdrop-blur">
+    <div class="timetable-scroll">
+      <table class="timetable" aria-label="Class timetable">
+        <thead>
+          <tr>
+            <th scope="col" class="timetable__day">Day</th>
+            {% for period in periods %}
+            <th scope="col">
+              <span class="timetable__period">{{ period.name }}</span>
+              <span class="timetable__clock">{{ period.start|time:"H:i" }}–{{ period.end|time:"H:i" }}</span>
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <th scope="row" class="timetable__day">{{ row.label }}</th>
+            {% for lesson in row.cells %}
+            <td class="{% if lesson %}has-lesson{% else %}is-empty{% endif %}">
+              {% if lesson %}
+              <div class="timetable__slot" title="{{ lesson.learning_area.name }}{% if lesson.teacher_id %} · {{ lesson.teacher.display_name }}{% endif %}">
+                <span class="timetable__code">{{ lesson.learning_area.code }}</span>
+                {% if lesson.teacher_id and lesson.teacher.short_name %}
+                <span class="timetable__teacher">{{ lesson.teacher.short_name }}</span>
+                {% endif %}
+              </div>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% else %}
+  <section class="rounded-3xl border border-white/70 bg-white/90 px-5 py-12 text-center shadow-panel backdrop-blur sm:px-8">
+    <p class="font-display text-xl font-semibold text-ink-950">No timetable available</p>
+    <p class="mt-2 text-sm text-ink-600">
+      {% if not academic_class %}
+        We could not match {{ student.display_name }} to an academic class stream yet.
+      {% else %}
+        A learning timetable has not been published for {{ academic_class.code }} yet.
+      {% endif %}
+    </p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

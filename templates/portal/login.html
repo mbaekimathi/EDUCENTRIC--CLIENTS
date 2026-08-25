@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in · {{ brand.school_display }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  :root { --brand: {{ brand.primary_color }}; }
+</style>
+{% endblock %}
+
+{% block body %}
+<main class="relative min-h-dvh overflow-hidden grain">
+  <div class="mx-auto flex min-h-dvh max-w-6xl flex-col justify-center px-4 py-10 sm:px-6 lg:px-8">
+    <div class="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+
+      {# Brand panel #}
+      <section class="anim-rise relative text-center lg:text-left">
+        <p class="mb-4 inline-flex items-center gap-2 rounded-full border border-ink-950/10 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-600 backdrop-blur">
+          Parent &amp; Student Portal
+        </p>
+        <h1 class="font-display text-[clamp(2.4rem,6vw,4.1rem)] font-semibold leading-[1.05] tracking-tight text-ink-950">
+          {{ brand.school_display }}
+        </h1>
+        <p class="mt-3 text-lg font-medium text-ink-600 sm:text-xl">
+          {{ brand.school_name }}
+        </p>
+        {% if brand.motto %}
+        <p class="mt-4 max-w-md text-base italic text-ink-400 lg:mx-0 mx-auto">“{{ brand.motto }}”</p>
+        {% else %}
+        <p class="mt-5 max-w-md text-base leading-relaxed text-ink-600 lg:mx-0 mx-auto">
+          Access learning updates, attendance, and school information from any phone, tablet, or computer.
+        </p>
+        {% endif %}
+        <div class="mt-8 hidden items-center gap-6 text-sm text-ink-400 lg:flex">
+          <div>
+            <p class="font-display text-3xl font-semibold text-brand">{{ student_count }}</p>
+            <p class="mt-1">learners on record</p>
+          </div>
+          <div class="h-10 w-px bg-ink-950/10"></div>
+          <p class="max-w-[14rem] leading-snug">Secure session access · Shared school records</p>
+        </div>
+      </section>
+
+      {# Login card #}
+      <section
+        class="anim-rise-delay relative rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur-md sm:p-7"
+        x-data="portalLogin({
+          role: '{{ role }}',
+          searchUrl: '{% url 'portal:student_search' %}',
+          initial: {{ preview_students|length }}
+        })"
+        style="--brand: {{ brand.primary_color }}"
+      >
+        <div class="mb-6 flex rounded-2xl bg-ink-950/[0.04] p-1">
+          <button type="button"
+                  @click="setRole('student')"
+                  :class="role === 'student' ? 'bg-white text-ink-950 shadow-sm' : 'text-ink-600'"
+                  class="flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition">
+            Student
+          </button>
+          <button type="button"
+                  @click="setRole('parent')"
+                  :class="role === 'parent' ? 'bg-white text-ink-950 shadow-sm' : 'text-ink-600'"
+                  class="flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition">
+            Parent / Guardian
+          </button>
+        </div>
+
+        <h2 class="font-display text-2xl font-semibold tracking-tight text-ink-950" x-text="role === 'student' ? 'Continue as a student' : 'Continue as a parent / guardian'"></h2>
+        <p class="mt-2 text-sm leading-relaxed text-ink-600">
+          Demo mode: pick any learner below. Parents and students open the same portal for that learner’s attendance, results, timetable, finances, and e-learning.
+        </p>
+        {% if error %}
+        <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800" role="alert">
+          {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" class="mt-5 space-y-4" @submit="if (!selectedId) { $event.preventDefault(); error = 'Select a student to continue.'; }">
+          {% csrf_token %}
+          <input type="hidden" name="role" :value="role">
+          <input type="hidden" name="student_id" :value="selectedId">
+
+          <label class="block">
+            <span class="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-400">Find a student</span>
+            <div class="relative">
+              <input type="search"
+                     x-model="query"
+                     @input.debounce.250ms="search()"
+                     @keydown.arrow-down.prevent="move(1)"
+                     @keydown.arrow-up.prevent="move(-1)"
+                     @keydown.enter.prevent="confirmHighlight()"
+                     placeholder="Name, admission no., or class…"
+                     autocomplete="off"
+                     class="w-full rounded-2xl border border-ink-950/10 bg-ink-950/[0.03] px-4 py-3.5 text-[15px] outline-none transition focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/15">
+              <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-400" x-show="loading">
+                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".25" stroke-width="3"/><path d="M21 12a9 9 0 0 1-9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+          </label>
+
+          <div class="overflow-hidden rounded-2xl border border-ink-950/10 bg-white">
+            <div class="max-h-[min(42vh,320px)] overflow-y-auto overscroll-contain" role="listbox" aria-label="Students">
+              <template x-if="!results.length && !loading">
+                <p class="px-4 py-8 text-center text-sm text-ink-400">No matching students.</p>
+              </template>
+              <template x-for="(s, i) in results" :key="s.id">
+                <button type="button"
+                        class="student-row anim-list-item flex w-full items-start gap-3 border-b border-ink-950/[0.06] px-3.5 py-3 text-left last:border-0"
+                        :style="`animation-delay: ${Math.min(i, 8) * 30}ms`"
+                        role="option"
+                        :aria-selected="selectedId === s.id"
+                        @click="select(s)"
+                        @mouseenter="highlight = i">
+                  <span class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand-deep"
+                        x-text="initials(s.name)"></span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-semibold text-ink-950" x-text="s.name"></span>
+                    <span class="mt-0.5 block truncate text-xs text-ink-400">
+                      <span x-text="s.admission_number"></span>
+                      · <span x-text="s.level"></span>
+                      · <span x-text="s.class_group"></span>
+                    </span>
+                    <span class="mt-0.5 block truncate text-xs text-ink-400" x-show="role === 'parent'">
+                      Guardian: <span x-text="s.parent"></span>
+                    </span>
+                  </span>
+                  <span class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-brand opacity-0 transition"
+                        :class="selectedId === s.id ? 'opacity-100' : ''"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <p class="text-xs text-ink-400" x-show="selectedName">
+            Selected: <span class="font-semibold text-ink-800" x-text="selectedLabel"></span>
+          </p>
+          <p class="text-xs text-red-700" x-show="error" x-text="error"></p>
+
+          <button type="submit"
+                  class="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-brand px-4 py-3.5 text-[15px] font-bold text-white transition hover:brightness-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!selectedId">
+            <span x-text="role === 'student' ? 'Enter portal as student' : 'Enter portal as parent'"></span>
+            <svg class="h-4 w-4 transition group-hover:translate-x-0.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.69l-3.22-3.22a.75.75 0 111.06-1.06l4.5 4.5a.75.75 0 010 1.06l-4.5 4.5a.75.75 0 11-1.06-1.06l3.22-3.22H3.75A.75.75 0 013 10z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+        </form>
+
+        <p class="mt-5 text-center text-[11px] leading-relaxed text-ink-400">
+          Sessions are encrypted cookies · Shared live database with school administration
+        </p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+  const seedStudents = [
+    {% for s in preview_students %}
+    {
+      id: {{ s.id }},
+      name: "{{ s.display_name|escapejs }}",
+      admission_number: "{{ s.admission_number|default:'—'|escapejs }}",
+      assessment_number: "{{ s.assessment_number|escapejs }}",
+      level: "{{ s.academic_level_label|escapejs }}",
+      class_group: "{{ s.class_group|default:'—'|escapejs }}",
+      parent: "{{ s.parent_guardian.full_name|default:'—'|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  function portalLogin({ role, searchUrl }) {
+    return {
+      role,
+      query: '',
+      results: seedStudents,
+      selectedId: null,
+      selectedLabel: '',
+      highlight: -1,
+      loading: false,
+      error: '',
+      setRole(next) {
+        this.role = next;
+        this.error = '';
+      },
+      initials(name) {
+        return (name || '?').split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+      },
+      select(s) {
+        this.selectedId = s.id;
+        this.selectedLabel = `${s.name} (${s.admission_number})`;
+        this.error = '';
+      },
+      move(delta) {
+        if (!this.results.length) return;
+        this.highlight = (this.highlight + delta + this.results.length) % this.results.length;
+      },
+      confirmHighlight() {
+        if (this.highlight >= 0 && this.results[this.highlight]) {
+          this.select(this.results[this.highlight]);
+        }
+      },
+      async search() {
+        this.loading = true;
+        this.error = '';
+        try {
+          const url = new URL(searchUrl, window.location.origin);
+          if (this.query.trim()) url.searchParams.set('q', this.query.trim());
+          const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+          const data = await res.json();
+          this.results = data.results || [];
+          this.highlight = this.results.length ? 0 : -1;
+          if (this.selectedId && !this.results.some(r => r.id === this.selectedId)) {
+            this.selectedId = null;
+            this.selectedLabel = '';
+          }
+        } catch (e) {
+          this.error = 'Could not search students. Check your connection.';
+        } finally {
+          this.loading = false;
+        }
+      }
+    }
+  }
+</script>
+{% endblock %}

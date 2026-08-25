@@ -1,0 +1,83 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}Attendance · {{ brand.school_display }}{% endblock %}
+{% block header_title %}Attendance{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-6xl space-y-6">
+  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-ink-400">Class register</p>
+        <h2 class="mt-1 font-display text-2xl font-semibold text-ink-950 sm:text-3xl">{{ student.display_name }}</h2>
+        <p class="mt-1 text-sm text-ink-600">
+          {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
+          {% if academic_class %} · matched to {{ academic_class.name }} ({{ academic_class.code }}){% endif %}
+        </p>
+      </div>
+      <div class="grid grid-cols-3 gap-3 sm:min-w-[18rem]">
+        <div class="rounded-2xl bg-ink-950/[0.03] px-3 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Days</p>
+          <p class="mt-1 font-display text-xl font-semibold">{{ days_recorded }}</p>
+        </div>
+        <div class="rounded-2xl bg-ink-950/[0.03] px-3 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Present</p>
+          <p class="mt-1 font-display text-xl font-semibold">{{ present_slots }}/{{ total_slots }}</p>
+        </div>
+        <div class="rounded-2xl bg-brand-soft px-3 py-3 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Rate</p>
+          <p class="mt-1 font-display text-xl font-semibold text-brand">
+            {% if attendance_rate is not None %}{{ attendance_rate }}%{% else %}—{% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
+    {% if records %}
+    <div class="overflow-x-auto">
+      <table class="portal-table w-full min-w-[36rem] text-left text-sm">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Morning</th>
+            <th>Afternoon</th>
+            <th>Evening</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in records %}
+          <tr>
+            <td>
+              <span class="font-semibold text-ink-950">{{ record.session.attendance_date|date:"D, j M Y" }}</span>
+            </td>
+            <td>
+              <span class="att-pill {% if record.morning %}is-present{% else %}is-absent{% endif %}">
+                {% if record.morning %}Present{% else %}Absent{% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="att-pill {% if record.afternoon %}is-present{% else %}is-absent{% endif %}">
+                {% if record.afternoon %}Present{% else %}Absent{% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="att-pill {% if record.evening %}is-present{% else %}is-absent{% endif %}">
+                {% if record.evening %}Present{% else %}Absent{% endif %}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="px-5 py-12 text-center sm:px-8">
+      <p class="font-display text-xl font-semibold text-ink-950">No attendance recorded yet</p>
+      <p class="mt-2 text-sm text-ink-600">When the class teacher saves the daily register, it will appear here for {{ student.display_name }}.</p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
