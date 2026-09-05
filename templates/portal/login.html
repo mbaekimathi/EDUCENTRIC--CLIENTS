@@ -15,6 +15,15 @@
 
       {# Brand panel #}
       <section class="anim-rise relative text-center lg:text-left">
+        <div class="mb-5 flex justify-center lg:justify-start">
+          <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-ink-950/10 bg-white shadow-sm {% if brand.has_logo %}p-2{% else %}bg-gradient-to-br from-brand to-brand-deep text-white{% endif %}">
+            {% if brand.has_logo %}
+            <img src="{{ brand.logo_url }}" alt="" class="h-full w-full object-contain" width="80" height="80" decoding="async">
+            {% else %}
+            <span class="font-display text-2xl font-bold tracking-tight">{{ brand.brand_initials }}</span>
+            {% endif %}
+          </div>
+        </div>
         <p class="mb-4 inline-flex items-center gap-2 rounded-full border border-ink-950/10 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-600 backdrop-blur">
           Parent &amp; Student Portal
         </p>
@@ -51,6 +60,19 @@
         })"
         style="--brand: {{ brand.primary_color }}"
       >
+        <div class="mb-5 flex items-center gap-3 lg:hidden">
+          <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-ink-950/10 bg-white {% if brand.has_logo %}p-1.5{% else %}bg-gradient-to-br from-brand to-brand-deep text-white{% endif %}">
+            {% if brand.has_logo %}
+            <img src="{{ brand.logo_url }}" alt="" class="h-full w-full object-contain" width="48" height="48" decoding="async">
+            {% else %}
+            <span class="text-sm font-bold">{{ brand.brand_initials }}</span>
+            {% endif %}
+          </div>
+          <div class="min-w-0">
+            <p class="truncate text-sm font-bold text-ink-950">{{ brand.school_display }}</p>
+            <p class="text-xs font-medium uppercase tracking-wider text-ink-400">Portal sign in</p>
+          </div>
+        </div>
         <div class="mb-6 flex rounded-2xl bg-ink-950/[0.04] p-1">
           <button type="button"
                   @click="setRole('student')"

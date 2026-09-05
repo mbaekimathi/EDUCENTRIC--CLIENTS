@@ -118,9 +118,10 @@ TIME_ZONE = "Africa/Nairobi"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+WHITENOISE_MANIFEST_STRICT = False
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -130,10 +131,19 @@ STORAGES = {
     },
 }
 
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
-# cPanel has no Nginx media alias — enable via .env. On VPS, prefer Nginx and set False.
-SERVE_MEDIA = env.bool("SERVE_MEDIA", default=False)
+MEDIA_URL = env("MEDIA_URL", default="/media/")
+_default_media = BASE_DIR / "media"
+_shared_admin_media = BASE_DIR.parent / "ADMINISTRATION" / "media"
+_media_root = env("MEDIA_ROOT", default="")
+if _media_root:
+    MEDIA_ROOT = Path(_media_root)
+elif _shared_admin_media.is_dir():
+    # Share Administration uploads (school logo) when apps sit side by side.
+    MEDIA_ROOT = _shared_admin_media
+else:
+    MEDIA_ROOT = _default_media
+# Serve uploaded media from Django by default (cPanel / shared hosting).
+SERVE_MEDIA = env.bool("SERVE_MEDIA", default=True)
 
 # Portal session keys (not Django auth users — students live in admissions_*).
 PORTAL_LOGIN_URL = "portal:login"
