@@ -70,12 +70,16 @@ def portal_branding(request):
     role = getattr(request, "portal_role", None)
     parent = getattr(request, "portal_parent", None)
     if role == portal_session.ROLE_PARENT and parent is not None:
-        siblings = list(
-            Student.objects.filter(
-                parent_guardian_id=parent.pk,
-                is_suspended=False,
-            ).order_by("first_name", "last_name")
-        )
+        siblings_key = f"portal:siblings:{parent.pk}"
+        siblings = cache.get(siblings_key)
+        if siblings is None:
+            siblings = list(
+                Student.objects.filter(
+                    parent_guardian_id=parent.pk,
+                    is_suspended=False,
+                ).order_by("first_name", "last_name")
+            )
+            cache.set(siblings_key, siblings, 60)
 
     student = getattr(request, "portal_student", None)
     return {

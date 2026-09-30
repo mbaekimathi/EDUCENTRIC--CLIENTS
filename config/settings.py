@@ -152,11 +152,12 @@ PORTAL_LOGIN_REDIRECT_URL = "portal:dashboard"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Redis in production; local memory cache for development.
-if env("REDIS_URL", default=""):
+_redis_url = env("REDIS_URL", default="").strip()
+if _redis_url:
     CACHES = {
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": env("REDIS_URL"),
+            "LOCATION": _redis_url,
             "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
             "TIMEOUT": 300,
             "KEY_PREFIX": "edu_clients",
@@ -165,6 +166,11 @@ if env("REDIS_URL", default=""):
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     SESSION_CACHE_ALIAS = "default"
 else:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "REDIS_URL is required when DEBUG=False so sessions, branding, "
+            "and rate limits are shared across workers."
+        )
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

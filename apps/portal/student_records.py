@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 
+from django.core.cache import cache
+
 from .activity_models import StudentConductRecord
 from .curriculum_models import (
     AcademicClass,
@@ -12,7 +14,6 @@ from .curriculum_models import (
     ClassAttendanceRecord,
     ExamMark,
     ExamSubjectSetting,
-    GeneratedExamTimetable,
     GeneratedLearningLesson,
     GradeBand,
 )
@@ -29,6 +30,10 @@ WEEKDAY_LABELS = {
     "SUN": "Sunday",
 }
 
+_LEVELS_CACHE_KEY = "portal:active_academic_levels:v1"
+_BANDS_CACHE_KEY = "portal:grade_bands:v1"
+_LOOKUP_CACHE_TTL = 300
+
 
 def _student_level_choice(level: AcademicLevel) -> str:
     name = (level.name or "").strip()
@@ -40,9 +45,18 @@ def _student_level_choice(level: AcademicLevel) -> str:
     return ""
 
 
+def _active_academic_levels() -> list[AcademicLevel]:
+    levels = cache.get(_LEVELS_CACHE_KEY)
+    if levels is None:
+        levels = list(AcademicLevel.objects.filter(status="ACTIVE"))
+        cache.set(_LEVELS_CACHE_KEY, levels, _LOOKUP_CACHE_TTL)
+    return levels
+
+
 def academic_level_for_student(student: Student) -> AcademicLevel | None:
-    for level in AcademicLevel.objects.filter(status="ACTIVE"):
-        if _student_level_choice(level) == student.academic_level:
+    target = student.academic_level
+    for level in _active_academic_levels():
+        if _student_level_choice(level) == target:
             return level
     return None
 
@@ -70,9 +84,20 @@ def _class_group_values(academic_class: AcademicClass) -> set[str]:
     return {value for value in values if value}
 
 
-def academic_class_for_student(student: Student) -> AcademicClass | None:
-    level = academic_level_for_student(student)
+def academic_class_for_student(
+    student: Student,
+    level: AcademicLevel | None = None,
+) -> AcademicClass | None:
+    cache_key = f"portal:aclass:{student.pk}"
     if level is None:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached or None
+
+    if level is None:
+        level = academic_level_for_student(student)
+    if level is None:
+        cache.set(cache_key, False, 120)
         return None
     classes = list(
         AcademicClass.objects.filter(academic_level=level, status="ACTIVE")
@@ -80,39 +105,64 @@ def academic_class_for_student(student: Student) -> AcademicClass | None:
         .order_by("order", "name")
     )
     if not classes:
+        cache.set(cache_key, False, 120)
         return None
 
+    resolved = None
     raw = (student.class_group or "").strip()
     if raw:
         for academic_class in classes:
             values = _class_group_values(academic_class)
             if any(raw.casefold() == value.casefold() for value in values):
-                return academic_class
+                resolved = academic_class
+                break
 
-    if len(classes) == 1:
-        return classes[0]
-    return None
+    if resolved is None and len(classes) == 1:
+        resolved = classes[0]
+
+    cache.set(cache_key, resolved if resolved is not None else False, 120)
+    return resolved
 
 
-def _grade_for_percent(percent: int | None, level: AcademicLevel | None) -> GradeBand | None:
+def _all_grade_bands() -> list[GradeBand]:
+    bands = cache.get(_BANDS_CACHE_KEY)
+    if bands is None:
+        bands = list(GradeBand.objects.select_related("academic_level").all())
+        cache.set(_BANDS_CACHE_KEY, bands, _LOOKUP_CACHE_TTL)
+    return bands
+
+
+def _bands_for_level(level: AcademicLevel | None) -> list[GradeBand]:
+    bands = _all_grade_bands()
+    if level is not None:
+        level_bands = [band for band in bands if band.academic_level_id == level.pk]
+        if level_bands:
+            return level_bands
+    return [band for band in bands if band.academic_level_id is None]
+
+
+def _grade_for_percent(
+    percent: int | None,
+    level: AcademicLevel | None,
+    bands: list[GradeBand] | None = None,
+) -> GradeBand | None:
     if percent is None:
         return None
-    bands = GradeBand.objects.all()
-    if level is not None:
-        level_bands = list(bands.filter(academic_level=level))
-        if level_bands:
-            bands = level_bands
-        else:
-            bands = list(bands.filter(academic_level__isnull=True))
-    else:
-        bands = list(bands.filter(academic_level__isnull=True))
+    if bands is None:
+        bands = _bands_for_level(level)
     for band in bands:
         if band.start_percent <= percent <= band.end_percent:
             return band
     return None
 
 
-def student_attendance(student: Student, limit: int = 60):
+def student_attendance(
+    student: Student,
+    limit: int = 60,
+    *,
+    include_class: bool = True,
+    academic_class: AcademicClass | None = None,
+):
     records = list(
         ClassAttendanceRecord.objects.filter(student=student)
         .select_related("session", "session__academic_class")
@@ -126,39 +176,32 @@ def student_attendance(student: Student, limit: int = 60):
             if flag:
                 present_slots += 1
     rate = round((present_slots * 100) / total_slots) if total_slots else None
+    resolved_class = academic_class
+    if include_class and resolved_class is None:
+        resolved_class = academic_class_for_student(student)
     return {
         "records": records,
         "days_recorded": len(records),
         "present_slots": present_slots,
         "total_slots": total_slots,
         "attendance_rate": rate,
-        "academic_class": academic_class_for_student(student),
+        "academic_class": resolved_class if include_class else None,
     }
 
 
-def student_results(student: Student):
-    level = academic_level_for_student(student)
+def _build_exam_list(
+    student: Student,
+    *,
+    level: AcademicLevel | None,
+    marks: list[ExamMark],
+    bands: list[GradeBand],
+) -> list[dict]:
     out_of_by_area: dict[int, int] = {}
     if level is not None:
-        for setting in ExamSubjectSetting.objects.filter(academic_level=level).select_related(
-            "learning_area"
+        for setting in ExamSubjectSetting.objects.filter(academic_level=level).only(
+            "learning_area_id", "out_of_marks"
         ):
             out_of_by_area[setting.learning_area_id] = setting.out_of_marks
-
-    marks = list(
-        ExamMark.objects.filter(student=student)
-        .select_related(
-            "learning_area",
-            "generation",
-            "generation__academic_year",
-            "generation__academic_term",
-        )
-        .order_by(
-            "-generation__created_at",
-            "learning_area__display_order",
-            "learning_area__name",
-        )
-    )
 
     exams: OrderedDict[int, dict] = OrderedDict()
     for mark in marks:
@@ -178,7 +221,7 @@ def student_results(student: Student):
         if mark.marks > out_of:
             out_of = area_total if area_total >= mark.marks else max(out_of, mark.marks)
         percent = round((mark.marks * 100) / out_of) if out_of else None
-        grade = _grade_for_percent(percent, level)
+        grade = _grade_for_percent(percent, level, bands)
         exam["rows"].append(
             {
                 "subject": mark.learning_area,
@@ -204,14 +247,106 @@ def student_results(student: Student):
                 "generation": exam["generation"],
                 "rows": exam["rows"],
                 "average_percent": avg,
-                "average_grade": _grade_for_percent(avg, level),
+                "average_grade": _grade_for_percent(avg, level, bands),
             }
         )
+    return exam_list
+
+
+def student_results(student: Student, *, max_exams: int | None = 12):
+    """Load exam marks. Caps to the newest ``max_exams`` generations (None = all)."""
+    level = academic_level_for_student(student)
+    bands = _bands_for_level(level)
+
+    marks_qs = (
+        ExamMark.objects.filter(student=student)
+        .select_related(
+            "learning_area",
+            "generation",
+            "generation__academic_year",
+            "generation__academic_term",
+        )
+        .order_by(
+            "-generation__created_at",
+            "learning_area__display_order",
+            "learning_area__name",
+        )
+    )
+
+    if max_exams is not None:
+        from django.db.models import Max
+
+        generation_ids = [
+            row["generation_id"]
+            for row in (
+                ExamMark.objects.filter(student=student)
+                .values("generation_id")
+                .annotate(newest=Max("generation__created_at"))
+                .order_by("-newest")[:max_exams]
+            )
+        ]
+        if not generation_ids:
+            return {
+                "exams": [],
+                "academic_class": academic_class_for_student(student, level=level),
+                "level": level,
+            }
+        marks_qs = marks_qs.filter(generation_id__in=generation_ids)
+
+    marks = list(marks_qs)
+    exam_list = _build_exam_list(student, level=level, marks=marks, bands=bands)
 
     return {
         "exams": exam_list,
-        "academic_class": academic_class_for_student(student),
+        "academic_class": academic_class_for_student(student, level=level),
         "level": level,
+    }
+
+
+def student_results_summary(student: Student) -> dict:
+    """Dashboard-sized results snapshot: latest exam average + exam count only."""
+    level = academic_level_for_student(student)
+    bands = _bands_for_level(level)
+
+    from django.db.models import Max
+
+    generation_rows = list(
+        ExamMark.objects.filter(student=student)
+        .values("generation_id")
+        .annotate(newest=Max("generation__created_at"))
+        .order_by("-newest")
+    )
+    exam_count = len(generation_rows)
+    if not generation_rows:
+        return {
+            "latest_average": None,
+            "latest_grade": None,
+            "latest_exam_name": None,
+            "exam_count": 0,
+        }
+
+    latest_id = generation_rows[0]["generation_id"]
+    marks = list(
+        ExamMark.objects.filter(student=student, generation_id=latest_id)
+        .select_related(
+            "learning_area",
+            "generation",
+            "generation__academic_year",
+            "generation__academic_term",
+        )
+        .order_by("learning_area__display_order", "learning_area__name")
+    )
+    exams = _build_exam_list(student, level=level, marks=marks, bands=bands)
+    latest = exams[0] if exams else None
+    return {
+        "latest_average": latest["average_percent"] if latest else None,
+        "latest_grade": (
+            latest["average_grade"].code
+            if latest and latest.get("average_grade")
+            else None
+        ),
+        "latest_exam_name": latest["generation"].display_name if latest else None,
+        "exam_count": exam_count,
     }
 
 
@@ -318,7 +453,8 @@ def results_chart_payload(exams: list[dict], *, mode: str = "all") -> dict:
 
 
 def student_timetable(student: Student):
-    academic_class = academic_class_for_student(student)
+    level = academic_level_for_student(student)
+    academic_class = academic_class_for_student(student, level=level)
     if academic_class is None:
         return {
             "academic_class": None,
@@ -328,10 +464,20 @@ def student_timetable(student: Student):
             "rows": [],
         }
 
-    lessons = list(
+    # Only the newest timetable generation for this class (admin regenerations accumulate).
+    latest_generation_id = (
         GeneratedLearningLesson.objects.filter(academic_class=academic_class)
-        .select_related("learning_area", "teacher", "academic_class")
-        .order_by("weekday", "start_time", "period_name")
+        .order_by("-generation_id")
+        .values_list("generation_id", flat=True)
+        .first()
+    )
+    lessons_qs = GeneratedLearningLesson.objects.filter(academic_class=academic_class)
+    if latest_generation_id is not None:
+        lessons_qs = lessons_qs.filter(generation_id=latest_generation_id)
+    lessons = list(
+        lessons_qs.select_related("learning_area", "teacher", "academic_class").order_by(
+            "weekday", "start_time", "period_name"
+        )
     )
     if not lessons:
         return {

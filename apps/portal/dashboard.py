@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.core.cache import cache
 from django.db.models import Max, Min, Prefetch, Q
 
 from . import elearning as elearning_service
 from . import student_records
-from .activity_models import SchoolActivity, SchoolActivityDay, SchoolActivityGrade
+from .activity_models import SchoolActivity, SchoolActivityDay
 from .curriculum_models import AcademicTerm, AcademicYear, GeneratedExamTimetable
-from .finance_models import student_finance_summary
+from .finance_models import student_finance_balance
 from .models import Student
 
 
@@ -46,17 +47,32 @@ def _current_academic_year(today: date) -> AcademicYear | None:
     )
 
 
-def _activity_applies_to_student(activity: SchoolActivity, student: Student | None) -> bool:
+def _activity_applies_to_student(
+    activity: SchoolActivity,
+    student: Student | None,
+    level=None,
+) -> bool:
     """Respect grade targeting from employees_schoolactivity_grades when present."""
     grade_ids = [link.academiclevel_id for link in activity.grade_links.all()]
     if not grade_ids:
         return True
     if student is None:
         return True
-    level = student_records.academic_level_for_student(student)
+    if level is None:
+        level = student_records.academic_level_for_student(student)
     if level is None:
         return False
     return level.pk in grade_ids
+
+
+def _current_academic_year_cached(today: date) -> AcademicYear | None:
+    cache_key = f"portal:current_academic_year:{today.isoformat()}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached or None
+    year = _current_academic_year(today)
+    cache.set(cache_key, year if year is not None else False, 120)
+    return year
 
 
 def academic_calendar_notifications(
@@ -67,6 +83,9 @@ def academic_calendar_notifications(
     """Load current + upcoming notifications from DB terms, exams, and school activities."""
     today = today or date.today()
     horizon = today + timedelta(days=upcoming_days)
+    student_level = (
+        student_records.academic_level_for_student(student) if student is not None else None
+    )
 
     current: list[dict] = []
     upcoming: list[dict] = []
@@ -79,14 +98,18 @@ def academic_calendar_notifications(
         seen.add(key)
         bucket.append(item)
 
-    year = _current_academic_year(today)
+    year = _current_academic_year_cached(today)
     terms: list[AcademicTerm] = []
     if year is not None:
-        terms = list(
-            AcademicTerm.objects.filter(academic_year=year)
-            .select_related("academic_year")
-            .order_by("order", "start_date")
-        )
+        terms_key = f"portal:year_terms:{year.pk}"
+        terms = cache.get(terms_key)
+        if terms is None:
+            terms = list(
+                AcademicTerm.objects.filter(academic_year=year)
+                .select_related("academic_year")
+                .order_by("order", "start_date")
+            )
+            cache.set(terms_key, terms, 120)
         if year.start_date <= today <= year.end_date:
             push(
                 current,
@@ -220,7 +243,7 @@ def academic_calendar_notifications(
     )
 
     for activity in activities:
-        if not _activity_applies_to_student(activity, student):
+        if not _activity_applies_to_student(activity, student, level=student_level):
             continue
         days = list(activity.days.all())
         if not days:
@@ -302,7 +325,10 @@ def academic_calendar_timeline(
 ) -> dict:
     """Full chronological calendar for the dedicated Academic calendar page."""
     today = today or date.today()
-    year = _current_academic_year(today)
+    year = _current_academic_year_cached(today)
+    student_level = (
+        student_records.academic_level_for_student(student) if student is not None else None
+    )
     events: list[dict] = []
     seen: set[tuple] = set()
 
@@ -335,11 +361,16 @@ def academic_calendar_timeline(
                 "badge": "Year",
             }
         )
-        for term in (
-            AcademicTerm.objects.filter(academic_year=year)
-            .select_related("academic_year")
-            .order_by("order", "start_date")
-        ):
+        terms_key = f"portal:year_terms:{year.pk}"
+        terms = cache.get(terms_key)
+        if terms is None:
+            terms = list(
+                AcademicTerm.objects.filter(academic_year=year)
+                .select_related("academic_year")
+                .order_by("order", "start_date")
+            )
+            cache.set(terms_key, terms, 120)
+        for term in terms:
             add(
                 {
                     "kind": "term",
@@ -401,7 +432,7 @@ def academic_calendar_timeline(
         ).filter(first_day__isnull=False)
 
     for activity in activity_qs.order_by("first_day", "title"):
-        if not _activity_applies_to_student(activity, student):
+        if not _activity_applies_to_student(activity, student, level=student_level):
             continue
         days = list(activity.days.all())
         if not days:
@@ -473,13 +504,15 @@ def academic_calendar_timeline(
 
 
 def student_dashboard(student: Student) -> dict:
-    attendance = student_records.student_attendance(student, limit=40)
-    results = student_records.student_results(student)
-    finance = student_finance_summary(student.pk)
-    elearning = elearning_service.student_elearning_subjects(student)
+    """Slim KPI dashboard — avoid full results / finance / e-learning payloads."""
+    attendance = student_records.student_attendance(
+        student, limit=40, include_class=False
+    )
+    results = student_records.student_results_summary(student)
+    finance = student_finance_balance(student.pk)
+    elearning_count = elearning_service.student_elearning_count(student)
     calendar = academic_calendar_notifications(student=student)
 
-    latest_exam = results["exams"][0] if results["exams"] else None
     balance = finance["balance"]
 
     analytics = {
@@ -487,18 +520,14 @@ def student_dashboard(student: Student) -> dict:
         "days_recorded": attendance["days_recorded"],
         "present_slots": attendance["present_slots"],
         "total_slots": attendance["total_slots"],
-        "latest_average": latest_exam["average_percent"] if latest_exam else None,
-        "latest_grade": (
-            latest_exam["average_grade"].code
-            if latest_exam and latest_exam.get("average_grade")
-            else None
-        ),
-        "latest_exam_name": latest_exam["generation"].display_name if latest_exam else None,
-        "exam_count": len(results["exams"]),
+        "latest_average": results["latest_average"],
+        "latest_grade": results["latest_grade"],
+        "latest_exam_name": results["latest_exam_name"],
+        "exam_count": results["exam_count"],
         "fee_balance": balance,
         "fee_balance_display": f"{balance:,.2f}",
         "fees_clear": balance <= Decimal("0.00"),
-        "elearning_count": len(elearning["subjects"]),
+        "elearning_count": elearning_count,
     }
 
     return {

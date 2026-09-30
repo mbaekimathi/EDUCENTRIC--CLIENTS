@@ -20,6 +20,18 @@ def student_elearning_subjects(student: Student):
     return {"subjects": subjects}
 
 
+def student_elearning_count(student: Student) -> int:
+    return (
+        ELearningEnrollment.objects.filter(
+            student_id=student.pk,
+            subject__is_active=True,
+        )
+        .values("subject_id")
+        .distinct()
+        .count()
+    )
+
+
 def student_elearning_subject(student: Student, subject_id: int):
     enrolled = ELearningEnrollment.objects.filter(
         student_id=student.pk,

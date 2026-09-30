@@ -86,29 +86,45 @@ class Payment(models.Model):
         ordering = ["-received_at"]
 
 
-def student_finance_summary(student_id: int) -> dict:
+def student_finance_balance(student_id: int) -> dict:
+    """Aggregate totals only — used by the dashboard to avoid loading every row."""
+    from django.db.models import Sum
+    from django.db.models.functions import Coalesce
+
+    active = FeeCharge.objects.filter(student_id=student_id).exclude(
+        status__in=(FeeCharge.Status.CANCELLED, FeeCharge.Status.WAIVED)
+    )
+    totals = active.aggregate(
+        total_charged=Coalesce(Sum("amount"), Decimal("0.00")),
+        total_paid=Coalesce(Sum("amount_paid"), Decimal("0.00")),
+    )
+    total_charged = totals["total_charged"] or Decimal("0.00")
+    total_paid = totals["total_paid"] or Decimal("0.00")
+    balance = total_charged - total_paid
+    return {
+        "total_charged": total_charged,
+        "total_paid": total_paid,
+        "balance": balance,
+    }
+
+
+def student_finance_summary(student_id: int, *, limit: int = 100) -> dict:
     charges = list(
         FeeCharge.objects.filter(student_id=student_id)
         .select_related("category")
-        .order_by("-created_at")
+        .order_by("-created_at")[:limit]
     )
     payments = list(
         Payment.objects.filter(student_id=student_id)
         .select_related("charge", "charge__category")
-        .order_by("-received_at")
+        .order_by("-received_at")[:limit]
     )
-    active = [
-        c
-        for c in charges
-        if c.status not in (FeeCharge.Status.CANCELLED, FeeCharge.Status.WAIVED)
-    ]
-    total_charged = sum((c.amount for c in active), Decimal("0.00"))
-    total_paid = sum((c.amount_paid for c in active), Decimal("0.00"))
-    balance = total_charged - total_paid
+    # Totals use the full ledger, not just the truncated lists shown in the UI.
+    totals = student_finance_balance(student_id)
     return {
         "charges": charges,
         "payments": payments,
-        "total_charged": total_charged,
-        "total_paid": total_paid,
-        "balance": balance,
+        "total_charged": totals["total_charged"],
+        "total_paid": totals["total_paid"],
+        "balance": totals["balance"],
     }

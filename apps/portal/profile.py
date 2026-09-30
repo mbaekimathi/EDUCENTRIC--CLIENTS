@@ -16,8 +16,15 @@ def media_url(name: str | None) -> str:
     cleaned = (name or "").strip().lstrip("/")
     if not cleaned:
         return ""
-    path = Path(settings.MEDIA_ROOT) / cleaned
-    if not path.is_file():
+    from django.core.cache import cache
+
+    cache_key = f"portal:media_exists:{cleaned}"
+    exists = cache.get(cache_key)
+    if exists is None:
+        path = Path(settings.MEDIA_ROOT) / cleaned
+        exists = path.is_file()
+        cache.set(cache_key, exists, 120)
+    if not exists:
         return ""
     return f"{settings.MEDIA_URL.rstrip('/')}/{cleaned}"
 
@@ -66,7 +73,11 @@ def store_profile_image(uploaded, folder: str = "parents/profiles") -> str:
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         ext = ".jpg"
     name = f"{folder}/{uuid.uuid4().hex}{ext}"
-    return default_storage.save(name, uploaded)
+    saved = default_storage.save(name, uploaded)
+    from django.core.cache import cache
+
+    cache.set(f"portal:media_exists:{saved}", True, 120)
+    return saved
 
 
 def delete_stored_image(name: str | None) -> None:
@@ -75,3 +86,7 @@ def delete_stored_image(name: str | None) -> None:
         return
     if default_storage.exists(cleaned):
         default_storage.delete(cleaned)
+    from django.core.cache import cache
+
+    cache.delete(f"portal:media_exists:{cleaned}")
+

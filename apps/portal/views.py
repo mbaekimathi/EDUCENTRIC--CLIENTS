@@ -34,13 +34,19 @@ def _client_ip(request):
 def _login_allowed(request):
     """Simple cache-backed throttle to blunt credential stuffing / abuse."""
     key = f"portal_login_rl:{_client_ip(request)}"
-    hits = cache.get(key, 0)
     limit = getattr(settings, "PORTAL_LOGIN_RATE_LIMIT", 30)
     window = getattr(settings, "PORTAL_LOGIN_RATE_WINDOW", 300)
-    if hits >= limit:
-        return False
-    cache.set(key, hits + 1, window)
-    return True
+    try:
+        hits = cache.incr(key)
+    except ValueError:
+        cache.add(key, 1, window)
+        hits = 1
+    else:
+        # Ensure TTL stays set when incr hits an existing key without expiry
+        # on backends that don't refresh TTL (LocMem / some Redis setups).
+        if hits == 1:
+            cache.set(key, hits, window)
+    return hits <= limit
 
 
 def _eligible_students():
@@ -49,6 +55,15 @@ def _eligible_students():
         .filter(is_suspended=False)
         .order_by("last_name", "first_name")
     )
+
+
+def _eligible_student_count() -> int:
+    cached = cache.get("portal:eligible_student_count")
+    if cached is not None:
+        return cached
+    count = _eligible_students().count()
+    cache.set("portal:eligible_student_count", count, 60)
+    return count
 
 
 @portal_session.redirect_if_authenticated
@@ -102,7 +117,7 @@ def login_view(request):
             "role": role,
             "error": error,
             "preview_students": preview_students,
-            "student_count": _eligible_students().count(),
+            "student_count": _eligible_student_count(),
         },
     )
 
@@ -113,13 +128,21 @@ def student_search(request):
     q = (request.GET.get("q") or "").strip()
     qs = _eligible_students()
     if q:
-        qs = qs.filter(
+        # Prefer prefix matches (index-friendly) then fall back to contains.
+        prefix = (
+            Q(first_name__istartswith=q)
+            | Q(last_name__istartswith=q)
+            | Q(admission_number__istartswith=q)
+            | Q(assessment_number__istartswith=q)
+        )
+        contains = (
             Q(first_name__icontains=q)
             | Q(last_name__icontains=q)
             | Q(admission_number__icontains=q)
             | Q(assessment_number__icontains=q)
             | Q(class_group__icontains=q)
         )
+        qs = qs.filter(prefix | contains)
     results = [
         {
             "id": s.pk,
