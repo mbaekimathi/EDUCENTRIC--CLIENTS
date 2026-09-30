@@ -363,6 +363,11 @@
       return;
     }
 
+    // Build FormData before disabling inputs — disabled fields are omitted.
+    var body = new FormData(form);
+    body.set("amount", amount);
+    body.set("phone", phone);
+
     clearPoll();
     setBusy(true);
     setStatus(
@@ -373,7 +378,6 @@
       "is-wait"
     );
 
-    var body = new FormData(form);
     fetch(initiateUrl, {
       method: "POST",
       credentials: "same-origin",
