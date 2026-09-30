@@ -41,8 +41,7 @@
       <div>
         <h3 class="portal-surface__title">Pay fees</h3>
         <p class="portal-surface__lede">
-          Enter an amount and send an M-Pesa STK prompt to your phone
-          {% if pay_phone_display %}({{ pay_phone_display }}){% endif %}.
+          Enter an amount and send an M-Pesa STK prompt to a phone number you choose.
         </p>
       </div>
     </header>
@@ -67,16 +66,26 @@
               value="{% if balance > 0 %}{{ balance|floatformat:0 }}{% endif %}"
               autocomplete="off"
             >
-            <span class="pay-fees-field__hint">
-              Prompt goes only to your profile number · whole shillings
-            </span>
+            <span class="pay-fees-field__hint">Whole shillings only</span>
           </label>
 
-          <div class="pay-fees-field">
+          <label class="pay-fees-field">
             <span class="pay-fees-field__label">M-Pesa phone</span>
-            <p class="pay-fees-phone" id="pay-phone-display">{{ pay_phone_display }}</p>
-            <span class="pay-fees-field__hint">Locked to your guardian profile</span>
-          </div>
+            <input
+              type="tel"
+              name="phone"
+              id="pay-phone"
+              class="pay-fees-field__input"
+              inputmode="tel"
+              autocomplete="tel"
+              required
+              placeholder="07XX XXX XXX"
+              value="{% if pay_phone_raw %}{{ pay_phone_display }}{% endif %}"
+            >
+            <span class="pay-fees-field__hint">
+              STK prompt goes to this number
+            </span>
+          </label>
         </div>
 
         <div class="pay-fees-actions">
@@ -218,6 +227,7 @@
   if (!form) return;
 
   var amountInput = document.getElementById("pay-amount");
+  var phoneInput = document.getElementById("pay-phone");
   var submitBtn = document.getElementById("pay-submit");
   var statusBox = document.getElementById("pay-stk-status");
   var statusTitle = document.getElementById("pay-stk-status-title");
@@ -244,6 +254,7 @@
   function setBusy(on) {
     busy = on;
     amountInput.disabled = on;
+    phoneInput.disabled = on;
     submitBtn.disabled = on;
     submitBtn.textContent = on ? "Sending…" : "Send STK prompt";
   }
@@ -342,6 +353,13 @@
     if (!amount || Number(amount) < 1) {
       setStatus(true, "Enter an amount", "Type how much you want to pay in Kenyan shillings.", "", "is-err");
       amountInput.focus();
+      return;
+    }
+
+    var phone = (phoneInput.value || "").trim();
+    if (!phone) {
+      setStatus(true, "Enter a phone number", "Type the M-Pesa number that should receive the prompt.", "", "is-err");
+      phoneInput.focus();
       return;
     }
 

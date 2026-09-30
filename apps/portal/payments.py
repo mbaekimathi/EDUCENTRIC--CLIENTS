@@ -145,7 +145,6 @@ def parent_payment_context(*, student: Student, parent: ParentGuardian | None) -
         }
 
     phone = normalize_msisdn(parent.phone_number or "")
-    phone_ok = len(phone) == 12 and phone.startswith("254")
 
     try:
         daraja = DarajaSettings.load()
@@ -163,12 +162,7 @@ def parent_payment_context(*, student: Student, parent: ParentGuardian | None) -
     account = resolve_student_fees_account(student)
     reason = ""
     can_pay = False
-    if not phone_ok:
-        reason = (
-            "Update your phone number in Profile settings so we can send the "
-            "M-Pesa prompt to you."
-        )
-    elif account is None:
+    if account is None:
         reason = "No student-fees account with M-Pesa is active in Accounts yet."
     elif not stk_ready:
         detail = ", ".join(missing) if missing else "incomplete configuration"
@@ -312,9 +306,10 @@ def initiate_parent_stk_payment(
     student: Student,
     parent: ParentGuardian,
     amount_raw: str,
+    phone_raw: str = "",
 ) -> dict:
     """
-    Parent self-prompt STK: always uses the guardian's own phone number.
+    Parent self-prompt STK to an entered M-Pesa phone (defaults to profile).
     Creates accounts_stk_push_request; ACCOUNTS callback records the payment.
     """
     if student.parent_guardian_id != parent.pk:
@@ -333,11 +328,10 @@ def initiate_parent_stk_payment(
         missing = ", ".join(daraja.stk_missing_fields())
         raise ValueError(f"M-Pesa STK Push is not ready ({missing}).")
 
-    phone = normalize_msisdn(parent.phone_number or "")
+    phone = normalize_msisdn(phone_raw or parent.phone_number or "")
     if len(phone) != 12 or not phone.startswith("254"):
         raise ValueError(
-            "Your profile phone number is not a valid Kenyan M-Pesa number. "
-            "Update it in Profile settings."
+            "Enter a valid Kenyan M-Pesa number (e.g. 07XX XXX XXX)."
         )
 
     try:

@@ -319,7 +319,7 @@ def finances(request):
 @portal_session.portal_login_required
 @require_POST
 def finances_stk_initiate(request):
-    """Parent-only: STK Push to the guardian's own phone for an entered amount."""
+    """Parent-only: STK Push to an entered M-Pesa phone for an amount."""
     student, denied = _portal_student_or_redirect(request)
     if denied:
         return denied
@@ -335,6 +335,7 @@ def finances_stk_initiate(request):
             student=student,
             parent=request.portal_parent,
             amount_raw=request.POST.get("amount") or "",
+            phone_raw=request.POST.get("phone") or "",
         )
     except PermissionError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=403)
