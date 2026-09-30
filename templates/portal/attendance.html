@@ -4,8 +4,26 @@
 {% block header_title %}Attendance{% endblock %}
 
 {% block content %}
-<div class="anim-rise mx-auto max-w-6xl space-y-6">
-  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
+<div class="anim-rise mx-auto max-w-6xl space-y-5">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <p class="page-hero__eyebrow">Daily register</p>
+        <h2 class="page-hero__title">Attendance</h2>
+        <p class="page-hero__lede">
+          Morning, afternoon, and evening presence for {{ student.display_name }}.
+        </p>
+      </div>
+      {% if records %}
+      <div class="page-hero__aside">
+        <span class="page-hero__chip">{{ records|length }} day{{ records|length|pluralize }} on record</span>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="portal-surface">
     {% if records %}
     <div class="overflow-x-auto">
       <table class="portal-table w-full min-w-[36rem] text-left text-sm">
@@ -44,9 +62,16 @@
       </table>
     </div>
     {% else %}
-    <div class="px-5 py-12 text-center sm:px-8">
-      <p class="font-display text-xl font-semibold text-ink-950">No attendance recorded yet</p>
-      <p class="mt-2 text-sm text-ink-600">When the class teacher saves the daily register, it will appear here for {{ student.display_name }}.</p>
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">No attendance recorded yet</p>
+      <p class="portal-empty__text">
+        When the class teacher saves the daily register, it will appear here for {{ student.display_name }}.
+      </p>
     </div>
     {% endif %}
   </section>

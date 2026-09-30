@@ -131,7 +131,15 @@ from .curriculum_models import (  # noqa: E402,F401
     GradeBand,
     LearningArea,
 )
-from .finance_models import FeeCategory, FeeCharge, Payment  # noqa: E402,F401
+from .finance_models import (  # noqa: E402,F401
+    DarajaSettings,
+    FeeCategory,
+    FeeCharge,
+    MpesaCallbackLog,
+    Payment,
+    SchoolAccount,
+    StkPushRequest,
+)
 from .elearning_models import ELearningEnrollment, ELearningSubject  # noqa: E402,F401
 from .activity_models import (  # noqa: E402,F401
     SchoolActivity,

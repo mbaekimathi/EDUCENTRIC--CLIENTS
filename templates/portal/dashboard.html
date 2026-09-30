@@ -12,37 +12,51 @@
 
 <div class="anim-rise mx-auto max-w-6xl space-y-5">
 
-  {# Welcome (parent only) #}
-  {% if portal_role == 'parent' %}
-  <section class="parent-hero overflow-hidden rounded-[1.5rem] border border-white/25 text-white shadow-glow">
-    <div class="parent-hero__mesh" aria-hidden="true"></div>
-    <div class="relative flex flex-col gap-3 px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-8 sm:py-7">
+  {# Welcome #}
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
       <div class="min-w-0">
-        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">Family portal</p>
-        <h2 class="mt-1 font-display text-3xl tracking-tight sm:text-[2.2rem]">
-          Hello, {{ portal_parent.full_name }}
+        <p class="page-hero__eyebrow">
+          {% if portal_role == 'parent' %}Family portal{% else %}Learner portal{% endif %}
+        </p>
+        <h2 class="page-hero__title">
+          {% if portal_role == 'parent' %}
+            Hello, {{ portal_parent.full_name }}
+          {% else %}
+            Welcome back, {{ student.first_name }}
+          {% endif %}
         </h2>
-        <p class="mt-2 text-sm text-white/85">
-          Analytics for <strong>{{ student.display_name }}</strong>
-          · {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
+        <p class="page-hero__lede">
+          {% if portal_role == 'parent' %}
+            Analytics for <strong>{{ student.display_name }}</strong>
+            · {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
+          {% else %}
+            {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
+            · Your attendance, results, timetable, and fees in one place
+          {% endif %}
         </p>
       </div>
-      {% if academic_year %}
-      <p class="shrink-0 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white/90 backdrop-blur">
-        {{ academic_year.name }}
-      </p>
-      {% endif %}
+      <div class="page-hero__aside">
+        {% if academic_year %}
+        <span class="page-hero__chip">{{ academic_year.name }}</span>
+        {% endif %}
+        {% if portal_role != 'parent' and student.assessment_number %}
+        <span class="page-hero__chip">{{ student.assessment_number }}</span>
+        {% endif %}
+      </div>
     </div>
   </section>
-  {% endif %}
 
   {# School modules — mobile only; desktop uses sidebar #}
-  <section class="{% if portal_role == 'parent' %}parent-panel{% else %}border border-ink-950/8 bg-white/90 shadow-panel backdrop-blur{% endif %} overflow-hidden rounded-[1.5rem] lg:hidden">
-    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}border-b border-ink-950/8 px-5 py-4 sm:px-6{% endif %}">
-      <h3 class="font-display text-xl text-ink-950 {% if portal_role != 'parent' %}font-semibold{% endif %}">School modules</h3>
-      <p class="mt-0.5 text-sm text-ink-600">
-        {% if portal_role == 'parent' %}Open a section for {{ student.first_name }}{% else %}Open a section to continue{% endif %}
-      </p>
+  <section class="{% if portal_role == 'parent' %}parent-panel{% else %}portal-surface{% endif %} lg:hidden">
+    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}portal-surface__head{% endif %}">
+      <div>
+        <h3 class="{% if portal_role == 'parent' %}font-display text-xl text-ink-950{% else %}portal-surface__title{% endif %}">School modules</h3>
+        <p class="{% if portal_role == 'parent' %}mt-0.5 text-sm text-ink-600{% else %}portal-surface__lede{% endif %}">
+          {% if portal_role == 'parent' %}Open a section for {{ student.first_name }}{% else %}Open a section to continue{% endif %}
+        </p>
+      </div>
     </header>
 
     {% if portal_role == 'parent' %}
@@ -215,10 +229,12 @@
   </section>
 
   {# Analytics #}
-  <section class="{% if portal_role == 'parent' %}parent-panel{% else %}border border-ink-950/8 bg-white/90 shadow-panel backdrop-blur{% endif %} overflow-hidden rounded-[1.5rem]">
-    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}border-b border-ink-950/8 px-5 py-4 sm:px-6{% endif %}">
-      <h3 class="font-display text-xl text-ink-950 {% if portal_role != 'parent' %}font-semibold{% endif %}">Learning analytics</h3>
-      <p class="mt-0.5 text-sm text-ink-600">Snapshot for {{ student.first_name }} across attendance, results, and fees</p>
+  <section class="{% if portal_role == 'parent' %}parent-panel{% else %}portal-surface{% endif %}">
+    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}portal-surface__head{% endif %}">
+      <div>
+        <h3 class="{% if portal_role == 'parent' %}font-display text-xl text-ink-950{% else %}portal-surface__title{% endif %}">Learning analytics</h3>
+        <p class="{% if portal_role == 'parent' %}mt-0.5 text-sm text-ink-600{% else %}portal-surface__lede{% endif %}">Snapshot for {{ student.first_name }} across attendance, results, and fees</p>
+      </div>
     </header>
 
 
@@ -227,7 +243,7 @@
 
       <a class="dash-stat" href="{% url 'portal:attendance' %}">
 
-        <span class="dash-stat__label">Attendance</span>
+        <span class="dash-stat__label">Check attendance</span>
 
         <span class="dash-stat__value">
 
@@ -249,13 +265,15 @@
 
         </span>
 
+        <span class="dash-stat__link">Open →</span>
+
       </a>
 
 
 
       <a class="dash-stat" href="{% url 'portal:results' %}">
 
-        <span class="dash-stat__label">Latest results</span>
+        <span class="dash-stat__label">View results</span>
 
         <span class="dash-stat__value">
 
@@ -289,13 +307,15 @@
 
         </span>
 
+        <span class="dash-stat__link">Open →</span>
+
       </a>
 
 
 
       <a class="dash-stat" href="{% url 'portal:finances' %}">
 
-        <span class="dash-stat__label">Fee balance</span>
+        <span class="dash-stat__label">Check fee or pay fee</span>
 
         <span class="dash-stat__value {% if analytics.fees_clear %}is-good{% elif analytics.fee_balance %}is-warn{% endif %}">
 
@@ -305,13 +325,15 @@
 
         <span class="dash-stat__meta">{% if analytics.fees_clear %}All charges settled{% else %}Open balance{% endif %}</span>
 
+        <span class="dash-stat__link">Open →</span>
+
       </a>
 
 
 
       <a class="dash-stat" href="{% url 'portal:elearning' %}">
 
-        <span class="dash-stat__label">E-Learning</span>
+        <span class="dash-stat__label">Check e-learning</span>
 
         <span class="dash-stat__value">{{ analytics.elearning_count }}</span>
 
@@ -329,6 +351,8 @@
 
         </span>
 
+        <span class="dash-stat__link">Open →</span>
+
       </a>
 
     </div>
@@ -339,13 +363,13 @@
 
   {# Academic calendar notifications #}
 
-  <section id="academic-calendar" class="{% if portal_role == 'parent' %}parent-panel{% else %}border border-ink-950/8 bg-white/90 shadow-panel backdrop-blur{% endif %} overflow-hidden rounded-[1.5rem]">
+  <section id="academic-calendar" class="{% if portal_role == 'parent' %}parent-panel{% else %}portal-surface{% endif %}">
 
-    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}border-b border-ink-950/8 px-5 py-4 sm:px-6{% endif %} flex flex-wrap items-end justify-between gap-3">
+    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}portal-surface__head{% endif %}">
 
       <div>
-        <h3 class="font-display text-xl text-ink-950 {% if portal_role != 'parent' %}font-semibold{% endif %}">Academic calendar</h3>
-        <p class="mt-0.5 text-sm text-ink-600">Current activity and what’s coming up next</p>
+        <h3 class="{% if portal_role == 'parent' %}font-display text-xl text-ink-950{% else %}portal-surface__title{% endif %}">Academic calendar</h3>
+        <p class="{% if portal_role == 'parent' %}mt-0.5 text-sm text-ink-600{% else %}portal-surface__lede{% endif %}">Current activity and what’s coming up next</p>
       </div>
       <a href="{% url 'portal:academic_calendar' %}" class="text-sm font-semibold text-brand hover:underline">
         View full calendar →
@@ -389,7 +413,7 @@
 
         {% else %}
 
-        <p class="dash-calendar__empty">No active term or exam window marked for today.</p>
+        <p class="dash-calendar__empty">No school activities happening today.</p>
 
         {% endif %}
 
@@ -429,7 +453,7 @@
 
         {% else %}
 
-        <p class="dash-calendar__empty">No openings, holidays, or exams in the next few weeks.</p>
+        <p class="dash-calendar__empty">No upcoming school activities in the next few weeks.</p>
 
         {% endif %}
 

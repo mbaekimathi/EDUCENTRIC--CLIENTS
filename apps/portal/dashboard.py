@@ -1,4 +1,4 @@
-"""Dashboard analytics and academic-calendar notifications for the portal home."""
+"""Dashboard analytics and school-activity notifications for the portal home."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from django.db.models import Max, Min, Prefetch, Q
 from . import elearning as elearning_service
 from . import student_records
 from .activity_models import SchoolActivity, SchoolActivityDay
-from .curriculum_models import AcademicTerm, AcademicYear, GeneratedExamTimetable
+from .curriculum_models import AcademicYear
 from .finance_models import student_finance_balance
 from .models import Student
 
@@ -80,7 +80,7 @@ def academic_calendar_notifications(
     today: date | None = None,
     upcoming_days: int = 90,
 ) -> dict:
-    """Load current + upcoming notifications from DB terms, exams, and school activities."""
+    """Load current + upcoming dashboard notifications from published school activities."""
     today = today or date.today()
     horizon = today + timedelta(days=upcoming_days)
     student_level = (
@@ -99,129 +99,6 @@ def academic_calendar_notifications(
         bucket.append(item)
 
     year = _current_academic_year_cached(today)
-    terms: list[AcademicTerm] = []
-    if year is not None:
-        terms_key = f"portal:year_terms:{year.pk}"
-        terms = cache.get(terms_key)
-        if terms is None:
-            terms = list(
-                AcademicTerm.objects.filter(academic_year=year)
-                .select_related("academic_year")
-                .order_by("order", "start_date")
-            )
-            cache.set(terms_key, terms, 120)
-        if year.start_date <= today <= year.end_date:
-            push(
-                current,
-                {
-                    "kind": "year",
-                    "title": f"Academic year {year.name}",
-                    "detail": _fmt_range(year.start_date, year.end_date),
-                    "start": year.start_date,
-                    "end": year.end_date,
-                    "badge": "Now",
-                },
-            )
-
-    date_matched_terms = [t for t in terms if t.start_date <= today <= t.end_date]
-    for term in terms:
-        in_term = term in date_matched_terms
-        treat_as_current = in_term or (
-            term.is_current and not date_matched_terms
-        )
-        if treat_as_current:
-            days_left = max(0, (term.end_date - today).days)
-            push(
-                current,
-                {
-                    "kind": "term",
-                    "title": f"{term.name} in progress",
-                    "detail": (
-                        f"{_fmt_range(term.start_date, term.end_date)}"
-                        + (f" · {days_left} day{'s' if days_left != 1 else ''} left" if days_left else "")
-                    ),
-                    "start": term.start_date,
-                    "end": term.end_date,
-                    "badge": "Current",
-                },
-            )
-            if today < term.end_date <= horizon:
-                push(
-                    upcoming,
-                    {
-                        "kind": "term_end",
-                        "title": f"{term.name} closes",
-                        "detail": (
-                            f"{_fmt_day(term.end_date)}"
-                            f" · in {_days_until(term.end_date, today)} days"
-                        ),
-                        "start": term.end_date,
-                        "end": term.end_date,
-                        "badge": "Closing",
-                    },
-                )
-
-        if today < term.start_date <= horizon:
-            push(
-                upcoming,
-                {
-                    "kind": "term_start",
-                    "title": f"{term.name} opens",
-                    "detail": (
-                        f"{_fmt_day(term.start_date)}"
-                        f" · in {_days_until(term.start_date, today)} days"
-                    ),
-                    "start": term.start_date,
-                    "end": term.end_date,
-                    "badge": "Opening",
-                },
-            )
-
-    # Exam windows stored on generated exam timetables
-    exam_filter = Q(start_date__isnull=False) & (
-        Q(end_date__gte=today, start_date__lte=horizon)
-        | Q(end_date__isnull=True, start_date__gte=today, start_date__lte=horizon)
-    )
-    if year is not None:
-        exam_filter &= Q(academic_year=year) | Q(academic_year__isnull=True)
-
-    for exam in (
-        GeneratedExamTimetable.objects.filter(exam_filter)
-        .select_related("academic_year", "academic_term")
-        .order_by("start_date", "-created_at")[:12]
-    ):
-        start = exam.start_date
-        end = exam.end_date or exam.start_date
-        if start is None:
-            continue
-        title = exam.display_name
-        if start <= today <= end:
-            push(
-                current,
-                {
-                    "kind": "exam",
-                    "title": title,
-                    "detail": _fmt_range(start, end),
-                    "start": start,
-                    "end": end,
-                    "badge": "Exams",
-                },
-            )
-        elif today < start <= horizon:
-            push(
-                upcoming,
-                {
-                    "kind": "exam",
-                    "title": title,
-                    "detail": (
-                        f"{_fmt_range(start, end)}"
-                        f" · in {_days_until(start, today)} days"
-                    ),
-                    "start": start,
-                    "end": end,
-                    "badge": "Exams",
-                },
-            )
 
     # School calendar activities published in ADMINISTRATION
     day_qs = SchoolActivityDay.objects.order_by("activity_date", "id")
@@ -311,129 +188,46 @@ def _event_status(start: date | None, end: date | None, today: date) -> str:
     return "upcoming"
 
 
-def _month_key(value: date) -> str:
-    return value.strftime("%Y-%m")
-
-
-def _month_label(value: date) -> str:
-    return value.strftime("%B %Y")
+def _activity_grade_labels(activity: SchoolActivity) -> list[str]:
+    labels: list[str] = []
+    for link in activity.grade_links.all():
+        level = getattr(link, "academiclevel", None)
+        name = getattr(level, "name", None) if level is not None else None
+        if name:
+            labels.append(str(name))
+    return labels
 
 
 def academic_calendar_timeline(
     student: Student | None = None,
     today: date | None = None,
 ) -> dict:
-    """Full chronological calendar for the dedicated Academic calendar page."""
+    """School activities calendar for the dedicated Academic calendar page."""
     today = today or date.today()
     year = _current_academic_year_cached(today)
-    student_level = (
-        student_records.academic_level_for_student(student) if student is not None else None
-    )
-    events: list[dict] = []
-    seen: set[tuple] = set()
-
-    def add(item: dict):
-        key = (item.get("kind"), item.get("title"), item.get("start"), item.get("end"))
-        if key in seen:
-            return
-        seen.add(key)
-        start = item.get("start")
-        end = item.get("end") or start
-        item["end"] = end
-        item["status"] = _event_status(start, end, today)
-        item["date_label"] = _fmt_range(start, end)
-        item["day_num"] = start.day if start else ""
-        item["weekday"] = start.strftime("%a") if start else ""
-        item["month_short"] = start.strftime("%b") if start else ""
-        item["iso_start"] = start.isoformat() if start else ""
-        item["iso_end"] = end.isoformat() if end else ""
-        item["duration_days"] = ((end - start).days + 1) if start and end else 1
-        events.append(item)
-
-    if year is not None:
-        add(
-            {
-                "kind": "year",
-                "title": f"Academic year {year.name}",
-                "description": "Full school year",
-                "start": year.start_date,
-                "end": year.end_date,
-                "badge": "Year",
-            }
-        )
-        terms_key = f"portal:year_terms:{year.pk}"
-        terms = cache.get(terms_key)
-        if terms is None:
-            terms = list(
-                AcademicTerm.objects.filter(academic_year=year)
-                .select_related("academic_year")
-                .order_by("order", "start_date")
-            )
-            cache.set(terms_key, terms, 120)
-        for term in terms:
-            add(
-                {
-                    "kind": "term",
-                    "title": term.name,
-                    "description": "Academic term",
-                    "start": term.start_date,
-                    "end": term.end_date,
-                    "badge": "Term",
-                }
-            )
-
-    exam_filter = Q(start_date__isnull=False)
-    if year is not None:
-        exam_filter &= Q(academic_year=year) | Q(academic_year__isnull=True)
-        exam_filter &= Q(start_date__lte=year.end_date, end_date__gte=year.start_date) | Q(
-            end_date__isnull=True,
-            start_date__gte=year.start_date,
-            start_date__lte=year.end_date,
-        )
-
-    for exam in (
-        GeneratedExamTimetable.objects.filter(exam_filter)
-        .select_related("academic_year", "academic_term")
-        .order_by("start_date", "-created_at")
-    ):
-        start = exam.start_date
-        if start is None:
-            continue
-        end = exam.end_date or start
-        add(
-            {
-                "kind": "exam",
-                "title": exam.display_name,
-                "description": "Examination window",
-                "start": start,
-                "end": end,
-                "badge": "Exams",
-            }
-        )
 
     day_qs = SchoolActivityDay.objects.order_by("activity_date", "id")
-    activity_qs = SchoolActivity.objects.filter(status="PUBLISHED").prefetch_related(
-        Prefetch("days", queryset=day_qs),
-        "grade_links",
-    )
-    if year is not None:
-        activity_qs = activity_qs.annotate(
+    activity_qs = (
+        SchoolActivity.objects.filter(status="PUBLISHED")
+        .prefetch_related(
+            Prefetch("days", queryset=day_qs),
+            "grade_links__academiclevel",
+        )
+        .annotate(
             first_day=Min("days__activity_date"),
             last_day=Max("days__activity_date"),
-        ).filter(
-            first_day__isnull=False,
+        )
+        .filter(first_day__isnull=False)
+    )
+
+    if year is not None:
+        activity_qs = activity_qs.filter(
             first_day__lte=year.end_date,
             last_day__gte=year.start_date,
         )
-    else:
-        activity_qs = activity_qs.annotate(
-            first_day=Min("days__activity_date"),
-            last_day=Max("days__activity_date"),
-        ).filter(first_day__isnull=False)
 
+    events: list[dict] = []
     for activity in activity_qs.order_by("first_day", "title"):
-        if not _activity_applies_to_student(activity, student, level=student_level):
-            continue
         days = list(activity.days.all())
         if not days:
             continue
@@ -443,63 +237,75 @@ def academic_calendar_timeline(
         if not description and days[0].day_description:
             description = days[0].day_description
         day_notes = [
-            {"date": d.activity_date, "label": _fmt_day(d.activity_date), "note": d.day_description}
+            {
+                "date": d.activity_date,
+                "label": _fmt_day(d.activity_date),
+                "note": d.day_description,
+            }
             for d in days
             if d.day_description
         ]
-        add(
+        grades = _activity_grade_labels(activity)
+        status = _event_status(start, end, today)
+        days_away = _days_until(start, today) if status == "upcoming" else 0
+        if status == "current":
+            when_label = "Happening now"
+        elif status == "upcoming":
+            when_label = (
+                "Tomorrow"
+                if days_away == 1
+                else f"In {days_away} days"
+                if days_away > 0
+                else "Upcoming"
+            )
+        else:
+            when_label = "Finished"
+        events.append(
             {
                 "kind": "activity",
                 "title": activity.title,
-                "description": description.splitlines()[0][:160] if description else "School activity",
+                "description": (
+                    description.splitlines()[0][:200] if description else ""
+                ),
                 "start": start,
                 "end": end,
-                "badge": "Activity",
+                "status": status,
+                "date_label": _fmt_range(start, end),
+                "iso_start": start.isoformat(),
+                "iso_end": end.isoformat(),
+                "duration_days": (end - start).days + 1,
+                "when_label": when_label,
                 "day_notes": day_notes,
+                "grades": grades,
+                "grades_label": ", ".join(grades) if grades else "Whole school",
             }
         )
 
-    events.sort(key=lambda item: (item.get("start") or today, item.get("end") or today, item.get("title") or ""))
-
-    focus_set = False
-    for event in events:
-        if not focus_set and event["status"] in ("current", "upcoming"):
-            event["is_focus"] = True
-            focus_set = True
-        else:
-            event["is_focus"] = False
-
-    months: list[dict] = []
-    month_index: dict[str, dict] = {}
-    for event in events:
-        start = event.get("start")
-        if start is None:
-            continue
-        key = _month_key(start)
-        if key not in month_index:
-            group = {
-                "key": key,
-                "label": _month_label(start),
-                "events": [],
-            }
-            month_index[key] = group
-            months.append(group)
-        month_index[key]["events"].append(event)
-
-    counts = {
-        "total": len(events),
-        "current": sum(1 for e in events if e["status"] == "current"),
-        "upcoming": sum(1 for e in events if e["status"] == "upcoming"),
-        "past": sum(1 for e in events if e["status"] == "past"),
-    }
+    current_events = [e for e in events if e["status"] == "current"]
+    upcoming_events = sorted(
+        [e for e in events if e["status"] == "upcoming"],
+        key=lambda item: (item["start"], item["title"]),
+    )
+    past_events = sorted(
+        [e for e in events if e["status"] == "past"],
+        key=lambda item: (item["start"], item["title"]),
+        reverse=True,
+    )
 
     return {
         "academic_year": year,
         "today": today,
         "events": events,
-        "months": months,
-        "counts": counts,
-        "has_focus": focus_set,
+        "current_events": current_events,
+        "upcoming_events": upcoming_events,
+        "past_events": past_events,
+        "counts": {
+            "total": len(events),
+            "current": len(current_events),
+            "upcoming": len(upcoming_events),
+            "past": len(past_events),
+        },
+        "has_activities": bool(events),
     }
 
 

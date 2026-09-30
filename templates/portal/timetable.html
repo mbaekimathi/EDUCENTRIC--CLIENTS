@@ -4,9 +4,22 @@
 {% block header_title %}Timetable{% endblock %}
 
 {% block content %}
-<div class="anim-rise mx-auto max-w-6xl space-y-6">
+<div class="anim-rise mx-auto max-w-6xl space-y-5">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <p class="page-hero__eyebrow">Weekly schedule</p>
+        <h2 class="page-hero__title">Timetable</h2>
+        <p class="page-hero__lede">
+          Class periods for {{ student.display_name }}{% if academic_class %} · {{ academic_class.code }}{% endif %}.
+        </p>
+      </div>
+    </div>
+  </section>
+
   {% if rows %}
-  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/95 shadow-panel backdrop-blur">
+  <section class="portal-surface">
     <div class="timetable-scroll">
       <table class="timetable" aria-label="Class timetable">
         <thead>
@@ -43,15 +56,22 @@
     </div>
   </section>
   {% else %}
-  <section class="rounded-3xl border border-white/70 bg-white/90 px-5 py-12 text-center shadow-panel backdrop-blur sm:px-8">
-    <p class="font-display text-xl font-semibold text-ink-950">No timetable available</p>
-    <p class="mt-2 text-sm text-ink-600">
-      {% if not academic_class %}
-        We could not match {{ student.display_name }} to an academic class stream yet.
-      {% else %}
-        A learning timetable has not been published for {{ academic_class.code }} yet.
-      {% endif %}
-    </p>
+  <section class="portal-surface">
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">No timetable available</p>
+      <p class="portal-empty__text">
+        {% if not academic_class %}
+          We could not match {{ student.display_name }} to an academic class stream yet.
+        {% else %}
+          A learning timetable has not been published for {{ academic_class.code }} yet.
+        {% endif %}
+      </p>
+    </div>
   </section>
   {% endif %}
 </div>

@@ -11,9 +11,11 @@ from . import profile as portal_profile
 from . import session as portal_session
 from . import student_records
 from . import elearning as elearning_service
-from .finance_models import student_finance_summary
+from . import payments as portal_payments
+from .finance_models import StkPushRequest, student_finance_summary
 from .forms import ParentProfileForm
 from .models import Student
+from .mpesa import MpesaApiError
 
 
 def _portal_student_or_redirect(request):
@@ -292,10 +294,98 @@ def finances(request):
     if denied:
         return denied
     data = student_finance_summary(student.pk)
+    is_parent = (
+        request.portal_role == portal_session.ROLE_PARENT and request.portal_parent is not None
+    )
+    pay_ctx = (
+        portal_payments.parent_payment_context(
+            student=student, parent=request.portal_parent
+        )
+        if is_parent
+        else portal_payments.parent_payment_context(student=student, parent=None)
+    )
     return render(
         request,
         "portal/finances.html",
-        {"student": student, **data},
+        {
+            "student": student,
+            "is_parent": is_parent,
+            **data,
+            **pay_ctx,
+        },
+    )
+
+
+@portal_session.portal_login_required
+@require_POST
+def finances_stk_initiate(request):
+    """Parent-only: STK Push to the guardian's own phone for an entered amount."""
+    student, denied = _portal_student_or_redirect(request)
+    if denied:
+        return denied
+
+    if request.portal_role != portal_session.ROLE_PARENT or not request.portal_parent:
+        return JsonResponse(
+            {"ok": False, "error": "Only parents can send an M-Pesa payment prompt."},
+            status=403,
+        )
+
+    try:
+        result = portal_payments.initiate_parent_stk_payment(
+            student=student,
+            parent=request.portal_parent,
+            amount_raw=request.POST.get("amount") or "",
+        )
+    except PermissionError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=403)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    except MpesaApiError as exc:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": str(exc),
+                "daraja": exc.payload if isinstance(exc.payload, dict) else {},
+            },
+            status=400,
+        )
+
+    return JsonResponse({"ok": True, **result})
+
+
+@portal_session.portal_login_required
+@require_http_methods(["GET", "POST"])
+def finances_stk_status(request, stk_id):
+    student, denied = _portal_student_or_redirect(request)
+    if denied:
+        return denied
+
+    if request.portal_role != portal_session.ROLE_PARENT or not request.portal_parent:
+        return JsonResponse(
+            {"ok": False, "error": "Only parents can check payment status."},
+            status=403,
+        )
+
+    stk = get_object_or_404(StkPushRequest, pk=stk_id, student_id=student.pk)
+    if student.parent_guardian_id != request.portal_parent.pk:
+        return JsonResponse({"ok": False, "error": "Not allowed."}, status=403)
+
+    stk = portal_payments.refresh_stk_from_callback_logs(stk)
+    payload = portal_payments.stk_request_payload(stk, include_finance=True)
+    failed = stk.status in {
+        StkPushRequest.Status.FAILED,
+        StkPushRequest.Status.CANCELLED,
+    }
+    return JsonResponse(
+        {
+            "ok": True,
+            "stk": payload,
+            "done": stk.status != StkPushRequest.Status.PENDING,
+            "failed": failed,
+            "success": (
+                stk.status == StkPushRequest.Status.SUCCESS and bool(stk.mpesa_receipt)
+            ),
+        }
     )
 
 

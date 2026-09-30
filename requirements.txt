@@ -3,5 +3,6 @@ django-environ==0.14.0
 django-redis==7.0.0
 Pillow==10.4.0
 PyMySQL>=1.1.1
+requests>=2.32.0
 whitenoise==6.9.0
 gunicorn==23.0.0

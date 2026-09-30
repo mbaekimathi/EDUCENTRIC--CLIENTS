@@ -86,6 +86,199 @@ class Payment(models.Model):
         ordering = ["-received_at"]
 
 
+class SchoolAccount(models.Model):
+    """Unmanaged mirror of ACCOUNTS school finance accounts."""
+
+    class Category(models.TextChoices):
+        STUDENT_FEES = "STUDENT_FEES", "Student fees"
+        POCKET_MONEY = "POCKET_MONEY", "Pocket money"
+        PETTY_CASHBOOK = "PETTY_CASHBOOK", "Petty cashbook"
+        OPERATIONS = "OPERATIONS", "Operations"
+        CAPITAL = "CAPITAL", "Capital"
+        OTHER = "OTHER", "Other"
+
+    class PaymentMode(models.TextChoices):
+        CASH = "CASH", "Cash"
+        MPESA = "MPESA", "M-Pesa"
+        BANK = "BANK", "Bank transfer"
+        CHEQUE = "CHEQUE", "Cheque"
+        OTHER = "OTHER", "Other"
+
+    category = models.CharField(max_length=32, choices=Category.choices)
+    custom_category = models.CharField(max_length=120, blank=True)
+    name = models.CharField(max_length=160)
+    description = models.TextField(blank=True)
+    payment_modes = models.JSONField(default=list)
+    academic_level_ids = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "accounts_school_account"
+        ordering = ["category", "name"]
+
+
+class DarajaSettings(models.Model):
+    """Unmanaged singleton mirror of ACCOUNTS Daraja / M-Pesa credentials."""
+
+    class Environment(models.TextChoices):
+        SANDBOX = "SANDBOX", "Sandbox"
+        PRODUCTION = "PRODUCTION", "Production"
+
+    active_environment = models.CharField(
+        max_length=20,
+        choices=Environment.choices,
+        default=Environment.SANDBOX,
+    )
+    is_enabled = models.BooleanField(default=False)
+
+    sandbox_consumer_key = models.CharField(max_length=255, blank=True)
+    sandbox_consumer_secret = models.CharField(max_length=255, blank=True)
+    sandbox_shortcode = models.CharField(max_length=20, blank=True)
+    sandbox_passkey = models.CharField(max_length=255, blank=True)
+    sandbox_callback_url = models.URLField(blank=True)
+
+    production_consumer_key = models.CharField(max_length=255, blank=True)
+    production_consumer_secret = models.CharField(max_length=255, blank=True)
+    production_shortcode = models.CharField(max_length=20, blank=True)
+    production_passkey = models.CharField(max_length=255, blank=True)
+    production_callback_url = models.URLField(blank=True)
+
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "accounts_daraja_settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj = cls.objects.filter(pk=1).first()
+        if obj is None:
+            # ACCOUNTS owns create; portal never inserts credentials rows.
+            raise DarajaSettings.DoesNotExist("Daraja settings have not been configured in ACCOUNTS.")
+        return obj
+
+    @property
+    def api_base_url(self) -> str:
+        if self.active_environment == self.Environment.PRODUCTION:
+            return "https://api.safaricom.co.ke"
+        return "https://sandbox.safaricom.co.ke"
+
+    def active_config(self) -> dict:
+        if self.active_environment == self.Environment.PRODUCTION:
+            return {
+                "environment": self.Environment.PRODUCTION,
+                "consumer_key": (self.production_consumer_key or "").strip(),
+                "consumer_secret": (self.production_consumer_secret or "").strip(),
+                "shortcode": (self.production_shortcode or "").strip(),
+                "passkey": (self.production_passkey or "").strip(),
+                "callback_url": (self.production_callback_url or "").strip(),
+            }
+        return {
+            "environment": self.Environment.SANDBOX,
+            "consumer_key": (self.sandbox_consumer_key or "").strip(),
+            "consumer_secret": (self.sandbox_consumer_secret or "").strip(),
+            "shortcode": (self.sandbox_shortcode or "").strip(),
+            "passkey": (self.sandbox_passkey or "").strip(),
+            "callback_url": (self.sandbox_callback_url or "").strip(),
+        }
+
+    def stk_missing_fields(self) -> list:
+        if not self.is_enabled:
+            return ["M-Pesa is disabled"]
+        cfg = self.active_config()
+        missing = []
+        if not cfg["consumer_key"]:
+            missing.append("consumer key")
+        if not cfg["consumer_secret"]:
+            missing.append("consumer secret")
+        if not cfg["shortcode"]:
+            missing.append("business shortcode")
+        if not cfg["passkey"]:
+            missing.append("Lipa Na M-Pesa passkey")
+        if not cfg["callback_url"]:
+            missing.append("callback URL")
+        return missing
+
+    def stk_ready(self) -> bool:
+        return not self.stk_missing_fields()
+
+
+class MpesaCallbackLog(models.Model):
+    class Status(models.TextChoices):
+        RECEIVED = "RECEIVED", "Received"
+        SUCCESS = "SUCCESS", "Success"
+        FAILED = "FAILED", "Failed"
+        IGNORED = "IGNORED", "Ignored"
+
+    merchant_request_id = models.CharField(max_length=64, blank=True, db_index=True)
+    checkout_request_id = models.CharField(max_length=64, blank=True, db_index=True)
+    result_code = models.IntegerField(null=True, blank=True)
+    result_desc = models.CharField(max_length=255, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    mpesa_receipt = models.CharField(max_length=64, blank=True, db_index=True)
+    phone_number = models.CharField(max_length=20, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.RECEIVED)
+    payment_id = models.PositiveBigIntegerField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "accounts_mpesa_callback_log"
+        ordering = ["-created_at"]
+
+
+class StkPushRequest(models.Model):
+    """Unmanaged mirror — portal initiates; ACCOUNTS callback completes payment."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SUCCESS = "SUCCESS", "Success"
+        FAILED = "FAILED", "Failed"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    student_id = models.PositiveBigIntegerField(db_index=True)
+    account = models.ForeignKey(
+        SchoolAccount,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True,
+        related_name="stk_push_requests",
+        db_constraint=False,
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    phone_number = models.CharField(max_length=20)
+    account_reference = models.CharField(max_length=120, blank=True)
+    merchant_request_id = models.CharField(max_length=64, blank=True, db_index=True)
+    checkout_request_id = models.CharField(max_length=64, blank=True, db_index=True)
+    mpesa_receipt = models.CharField(max_length=64, blank=True, db_index=True)
+    result_code = models.IntegerField(null=True, blank=True)
+    result_desc = models.CharField(max_length=255, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    notes = models.TextField(blank=True)
+    created_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    payment_id = models.PositiveBigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False
+        db_table = "accounts_stk_push_request"
+        ordering = ["-created_at"]
+
+
 def student_finance_balance(student_id: int) -> dict:
     """Aggregate totals only — used by the dashboard to avoid loading every row."""
     from django.db.models import Sum

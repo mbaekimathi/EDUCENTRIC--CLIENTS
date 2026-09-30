@@ -13,7 +13,7 @@
 
 {% block body %}
 <div
-  class="portal-shell relative min-h-dvh grain {% if portal_role == 'parent' %}portal-shell--parent{% endif %}"
+  class="portal-shell relative min-h-dvh grain {% if portal_role == 'parent' %}portal-shell--parent{% else %}portal-shell--student{% endif %}"
   x-data="{
     sidebarOpen: false,
     sidebarCollapsed: false,
@@ -104,11 +104,11 @@
             </svg>
           </a>
 
-          <div class="relative" @click.outside="userMenuOpen = false">
+          <div class="relative z-50" @click.outside="userMenuOpen = false">
             <button
               type="button"
               class="portal-user-chip"
-              @click="userMenuOpen = !userMenuOpen"
+              @click.stop="userMenuOpen = !userMenuOpen"
               :aria-expanded="userMenuOpen.toString()"
               aria-haspopup="menu"
             >

@@ -8,9 +8,27 @@
 {% endblock %}
 
 {% block content %}
-<div class="anim-rise mx-auto max-w-6xl space-y-6">
+<div class="anim-rise mx-auto max-w-6xl space-y-5">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <p class="page-hero__eyebrow">Assessment</p>
+        <h2 class="page-hero__title">Results</h2>
+        <p class="page-hero__lede">
+          Exam scores and trends for {{ student.display_name }}.
+        </p>
+      </div>
+      {% if all_exams %}
+      <div class="page-hero__aside">
+        <span class="page-hero__chip">{{ all_exams|length }} exam{{ all_exams|length|pluralize }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
   {% if all_exams %}
-  <section class="rounded-3xl border border-white/70 bg-white/90 px-5 py-4 shadow-panel backdrop-blur sm:px-7">
+  <section class="portal-surface px-5 py-4 sm:px-7">
     <form method="get" action="{% url 'portal:results' %}" class="results-filter">
       <label for="exam-filter" class="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-ink-400">View</label>
       <select
@@ -29,36 +47,40 @@
     </form>
   </section>
 
-  <section class="rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
-    <div class="border-b border-ink-950/8 bg-ink-950/[0.02] px-5 py-4 sm:px-7">
-      <h3 class="font-display text-lg font-semibold text-ink-950">
-        {% if selected_exam == "all" %}
-          Performance trend
-        {% else %}
-          Subject scores
-        {% endif %}
-      </h3>
-      <p class="mt-0.5 text-sm text-ink-600">
-        {% if selected_exam == "all" %}
-          Average percentage across exams (oldest → newest)
-        {% else %}
-          {{ chart_data.exam_name }} — score % by subject
-        {% endif %}
-      </p>
-    </div>
+  <section class="portal-surface">
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">
+          {% if selected_exam == "all" %}
+            Performance trend
+          {% else %}
+            Subject scores
+          {% endif %}
+        </h3>
+        <p class="portal-surface__lede">
+          {% if selected_exam == "all" %}
+            Average percentage across exams (oldest → newest)
+          {% else %}
+            {{ chart_data.exam_name }} — score % by subject
+          {% endif %}
+        </p>
+      </div>
+    </header>
     <div class="results-chart-wrap px-4 py-5 sm:px-7 sm:py-6">
       <canvas id="results-trend-chart" aria-label="Results chart" role="img"></canvas>
     </div>
   </section>
 
-  <section class="rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
-    <div class="border-b border-ink-950/8 bg-ink-950/[0.02] px-5 py-4 sm:px-7">
-      <h3 class="font-display text-lg font-semibold text-ink-950">Raw data</h3>
-      <p class="mt-0.5 text-sm text-ink-600">
-        Subject percentages
-        {% if comparison.exam_columns|length > 1 %}compared across exams{% else %}for the selected exam{% endif %}
-      </p>
-    </div>
+  <section class="portal-surface">
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Raw data</h3>
+        <p class="portal-surface__lede">
+          Subject percentages
+          {% if comparison.exam_columns|length > 1 %}compared across exams{% else %}for the selected exam{% endif %}
+        </p>
+      </div>
+    </header>
 
     {% if comparison.subject_rows %}
     <div class="results-compare-scroll">
@@ -203,9 +225,16 @@
     })();
   </script>
   {% else %}
-  <section class="rounded-3xl border border-white/70 bg-white/90 px-5 py-12 text-center shadow-panel backdrop-blur sm:px-8">
-    <p class="font-display text-xl font-semibold text-ink-950">No exam results yet</p>
-    <p class="mt-2 text-sm text-ink-600">Published marks for {{ student.display_name }} will show here by exam and subject.</p>
+  <section class="portal-surface">
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6m4 6V7m4 10v-3M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">No exam results yet</p>
+      <p class="portal-empty__text">Published marks for {{ student.display_name }} will show here by exam and subject.</p>
+    </div>
   </section>
   {% endif %}
 </div>

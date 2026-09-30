@@ -166,15 +166,12 @@ if _redis_url:
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     SESSION_CACHE_ALIAS = "default"
 else:
-    if not DEBUG:
-        raise ImproperlyConfigured(
-            "REDIS_URL is required when DEBUG=False so sessions, branding, "
-            "and rate limits are shared across workers."
-        )
+    # cPanel / single-worker Passenger: DB sessions are fine without Redis.
+    # Prefer REDIS_URL when running multiple workers so cache stays shared.
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "edu-clients-development-cache",
+            "LOCATION": "edu-clients-cache",
             "TIMEOUT": 300,
         }
     }

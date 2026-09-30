@@ -4,245 +4,162 @@
 {% block header_title %}Academic calendar{% endblock %}
 
 {% block content %}
-<div
-  class="anim-rise cal-page mx-auto max-w-5xl"
-  x-data="{
-    filter: 'all',
-    showJump: false,
-    matches(status) {
-      return this.filter === 'all' || this.filter === status;
-    },
-    monthVisible(el) {
-      return Array.from(el.querySelectorAll('[data-cal-event]')).some(
-        (node) => !node.classList.contains('is-filtered-out')
-      );
-    },
-    scrollToNow() {
-      const target = document.getElementById('cal-now');
-      if (!target) return;
-      const header = document.querySelector('.portal-header');
-      const offset = (header ? header.offsetHeight : 64) + 20;
-      const top = target.getBoundingClientRect().top + window.pageYOffset - offset;
-      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-      try { target.focus({ preventScroll: true }); } catch (e) {}
-    },
-    onScroll() {
-      const target = document.getElementById('cal-now');
-      if (!target) { this.showJump = false; return; }
-      const rect = target.getBoundingClientRect();
-      this.showJump = rect.top < 80 || rect.bottom > window.innerHeight - 40;
-    }
-  }"
-  @scroll.window="onScroll()"
-  x-init="$nextTick(() => { onScroll(); {% if has_focus %}setTimeout(() => scrollToNow(), 90);{% endif %} })"
->
-  <section class="cal-hero" aria-labelledby="cal-hero-title">
-    <div class="cal-hero__top">
-      <div class="cal-hero__copy">
-        <div class="cal-hero__chips">
-          <span class="cal-chip">
-            {% if academic_year %}{{ academic_year.name }}{% else %}School year{% endif %}
-          </span>
-          <span class="cal-chip cal-chip--muted">
-            <time datetime="{{ today|date:'Y-m-d' }}">Today · {{ today|date:"j M Y" }}</time>
-          </span>
-        </div>
-        <h2 id="cal-hero-title" class="cal-hero__title">Academic calendar</h2>
-        <p class="cal-hero__lede">
-          The full year in sequence — terms, exams, and school activities — with past events kept above and focus on what’s current.
+<div class="anim-rise cal-page mx-auto max-w-3xl">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <p class="page-hero__eyebrow">School activities</p>
+        <h2 class="page-hero__title">Academic calendar</h2>
+        <p class="page-hero__lede">
+          What’s happening at school — today, next, and recently finished.
         </p>
       </div>
-
-      <div class="cal-hero__aside" aria-label="Calendar summary">
-        <button
-          type="button"
-          class="cal-metric"
-          :class="filter === 'past' && 'is-active'"
-          @click="filter = filter === 'past' ? 'all' : 'past'"
-        >
-          <span class="cal-metric__value">{{ counts.past }}</span>
-          <span class="cal-metric__label">Past</span>
-        </button>
-        <button
-          type="button"
-          class="cal-metric is-live"
-          :class="filter === 'current' && 'is-active'"
-          @click="filter = filter === 'current' ? 'all' : 'current'"
-        >
-          <span class="cal-metric__value">{{ counts.current }}</span>
-          <span class="cal-metric__label">Now</span>
-        </button>
-        <button
-          type="button"
-          class="cal-metric is-next"
-          :class="filter === 'upcoming' && 'is-active'"
-          @click="filter = filter === 'upcoming' ? 'all' : 'upcoming'"
-        >
-          <span class="cal-metric__value">{{ counts.upcoming }}</span>
-          <span class="cal-metric__label">Upcoming</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="cal-hero__bar">
-      <ul class="cal-legend" aria-label="Event types">
-        <li><span class="cal-legend__swatch kind-year"></span> Year</li>
-        <li><span class="cal-legend__swatch kind-term"></span> Term</li>
-        <li><span class="cal-legend__swatch kind-exam"></span> Exams</li>
-        <li><span class="cal-legend__swatch kind-activity"></span> Activity</li>
-      </ul>
-      <div class="cal-hero__actions">
-        <button
-          type="button"
-          class="cal-ghost-btn"
-          @click="filter = 'all'"
-          x-show="filter !== 'all'"
-          x-cloak
-        >
-          Clear filter
-        </button>
-        {% if has_focus %}
-        <button type="button" class="cal-primary-btn" @click="scrollToNow()">
-          Jump to now
-        </button>
+      <div class="page-hero__aside">
+        {% if academic_year %}
+        <span class="page-hero__chip">{{ academic_year.name }}</span>
         {% endif %}
+        <span class="page-hero__chip">{{ counts.total }} activit{{ counts.total|pluralize:"y,ies" }}</span>
       </div>
     </div>
   </section>
 
-  {% if months %}
-  <ol class="cal-timeline" aria-label="Academic calendar timeline">
-    {% for month in months %}
-    <li
-      class="cal-month"
-      x-show="filter === 'all' || monthVisible($el)"
-    >
-      <header class="cal-month__head">
-        <h3 class="cal-month__label">{{ month.label }}</h3>
-        <span class="cal-month__count">{{ month.events|length }} event{{ month.events|length|pluralize }}</span>
-      </header>
+  {% if has_activities %}
 
-      <ol class="cal-month__events">
-        {% for event in month.events %}
-        <li
-          data-cal-event
-          class="cal-event is-{{ event.status }} kind-{{ event.kind }}{% if event.is_focus %} is-focus{% endif %}"
-          :class="matches('{{ event.status }}') ? '' : 'is-filtered-out'"
-          x-show="matches('{{ event.status }}')"
-          x-transition.opacity.duration.200ms
-          {% if event.is_focus %}id="cal-now" tabindex="-1"{% endif %}
-        >
-          {% if event.is_focus and counts.past %}
-          <div class="cal-divider" role="separator">
-            <span>Now &amp; upcoming</span>
-          </div>
-          {% endif %}
-
-          <article class="cal-card">
-            <div class="cal-card__date">
-              <span class="cal-card__month">{{ event.month_short }}</span>
-              <span class="cal-card__day">{{ event.day_num }}</span>
-              <span class="cal-card__weekday">{{ event.weekday }}</span>
-            </div>
-
-            <div class="cal-card__rail" aria-hidden="true">
-              <span class="cal-card__node"></span>
-            </div>
-
-            <div class="cal-card__body">
-              <div class="cal-card__topline">
-                <span class="cal-card__kind">
-                  <span class="cal-card__icon" aria-hidden="true">
-                    {% if event.kind == "exam" %}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-                    {% elif event.kind == "activity" %}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                    {% elif event.kind == "year" %}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    {% else %}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 001.5 17V5.5A2.5 2.5 0 014 3h16v14H6.5A2.5 2.5 0 004 19.5z"/></svg>
-                    {% endif %}
-                  </span>
-                  {{ event.badge }}
-                </span>
-
-                {% if event.status == "current" %}
-                <span class="cal-card__status is-live"><span class="cal-card__dot"></span> Happening now</span>
-                {% elif event.status == "upcoming" %}
-                <span class="cal-card__status is-next">Upcoming</span>
-                {% else %}
-                <span class="cal-card__status">Completed</span>
-                {% endif %}
-              </div>
-
-              <h4 class="cal-card__title">{{ event.title }}</h4>
-
-              {% if event.description %}
-              <p class="cal-card__desc">{{ event.description }}</p>
-              {% endif %}
-
-              <div class="cal-card__footer">
-                <span class="cal-card__range">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                  <time datetime="{{ event.iso_start }}">{{ event.date_label }}</time>
-                </span>
-                <span class="cal-card__duration">
-                  {% if event.duration_days == 1 %}1 day{% else %}{{ event.duration_days }} days{% endif %}
-                </span>
-              </div>
-
-              {% if event.day_notes %}
-              <ul class="cal-card__notes">
-                {% for note in event.day_notes %}
-                <li>
-                  <time datetime="{{ note.date|date:'Y-m-d' }}">{{ note.label }}</time>
-                  <span>{{ note.note }}</span>
-                </li>
-                {% endfor %}
-              </ul>
-              {% endif %}
-            </div>
-          </article>
-        </li>
-        {% endfor %}
-      </ol>
-    </li>
-    {% endfor %}
-  </ol>
-
-  <p class="cal-filter-empty" x-show="filter === 'past' && {{ counts.past }} === 0" x-cloak>
-    No past events in this calendar.
-  </p>
-  <p class="cal-filter-empty" x-show="filter === 'current' && {{ counts.current }} === 0" x-cloak>
-    Nothing is marked as happening right now.
-  </p>
-  <p class="cal-filter-empty" x-show="filter === 'upcoming' && {{ counts.upcoming }} === 0" x-cloak>
-    No upcoming events in this calendar.
-  </p>
-  {% else %}
-  <section class="cal-empty">
-    <div class="cal-empty__icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-    </div>
-    <p class="cal-empty__title">No calendar events yet</p>
-    <p class="cal-empty__text">
-      Terms, exams, and school activities will appear here once they are published for this year.
-    </p>
+  {% if current_events %}
+  <section class="cal-section" aria-labelledby="cal-now-heading">
+    <header class="cal-section__head">
+      <h3 id="cal-now-heading" class="cal-section__title">
+        <span class="cal-section__dot is-now" aria-hidden="true"></span>
+        Happening now
+      </h3>
+      <p class="cal-section__count">{{ current_events|length }}</p>
+    </header>
+    <ul class="cal-activity-list">
+      {% for event in current_events %}
+      <li class="cal-activity is-current">
+        <div class="cal-activity__status">{{ event.when_label }}</div>
+        <h4 class="cal-activity__title">{{ event.title }}</h4>
+        {% if event.description %}
+        <p class="cal-activity__desc">{{ event.description }}</p>
+        {% endif %}
+        <div class="cal-activity__meta">
+          <span>{{ event.date_label }}</span>
+          <span>{{ event.grades_label }}</span>
+          <span>
+            {% if event.duration_days == 1 %}1 day{% else %}{{ event.duration_days }} days{% endif %}
+          </span>
+        </div>
+        {% if event.day_notes %}
+        <ul class="cal-activity__notes">
+          {% for note in event.day_notes %}
+          <li>
+            <time datetime="{{ note.date|date:'Y-m-d' }}">{{ note.label }}</time>
+            <span>{{ note.note }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
   </section>
   {% endif %}
 
-  {% if has_focus %}
-  <button
-    type="button"
-    class="cal-fab"
-    x-show="showJump"
-    x-transition.opacity.duration.200ms
-    x-cloak
-    @click="scrollToNow()"
-  >
-    <span class="cal-fab__dot" aria-hidden="true"></span>
-    Today
-  </button>
+  <section class="cal-section" aria-labelledby="cal-upcoming-heading">
+    <header class="cal-section__head">
+      <h3 id="cal-upcoming-heading" class="cal-section__title">
+        <span class="cal-section__dot is-upcoming" aria-hidden="true"></span>
+        Coming up
+      </h3>
+      <p class="cal-section__count">{{ upcoming_events|length }}</p>
+    </header>
+    {% if upcoming_events %}
+    <ul class="cal-activity-list">
+      {% for event in upcoming_events %}
+      <li class="cal-activity is-upcoming">
+        <div class="cal-activity__status">{{ event.when_label }}</div>
+        <h4 class="cal-activity__title">{{ event.title }}</h4>
+        {% if event.description %}
+        <p class="cal-activity__desc">{{ event.description }}</p>
+        {% endif %}
+        <div class="cal-activity__meta">
+          <span>{{ event.date_label }}</span>
+          <span>{{ event.grades_label }}</span>
+          <span>
+            {% if event.duration_days == 1 %}1 day{% else %}{{ event.duration_days }} days{% endif %}
+          </span>
+        </div>
+        {% if event.day_notes %}
+        <ul class="cal-activity__notes">
+          {% for note in event.day_notes %}
+          <li>
+            <time datetime="{{ note.date|date:'Y-m-d' }}">{{ note.label }}</time>
+            <span>{{ note.note }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="cal-section__empty">No upcoming school activities scheduled yet.</p>
+    {% endif %}
+  </section>
+
+  {% if past_events %}
+  <section class="cal-section" aria-labelledby="cal-past-heading">
+    <header class="cal-section__head">
+      <h3 id="cal-past-heading" class="cal-section__title">
+        <span class="cal-section__dot is-past" aria-hidden="true"></span>
+        Earlier this year
+      </h3>
+      <p class="cal-section__count">{{ past_events|length }}</p>
+    </header>
+    <ul class="cal-activity-list">
+      {% for event in past_events %}
+      <li class="cal-activity is-past">
+        <div class="cal-activity__status">{{ event.when_label }}</div>
+        <h4 class="cal-activity__title">{{ event.title }}</h4>
+        {% if event.description %}
+        <p class="cal-activity__desc">{{ event.description }}</p>
+        {% endif %}
+        <div class="cal-activity__meta">
+          <span>{{ event.date_label }}</span>
+          <span>{{ event.grades_label }}</span>
+          <span>
+            {% if event.duration_days == 1 %}1 day{% else %}{{ event.duration_days }} days{% endif %}
+          </span>
+        </div>
+        {% if event.day_notes %}
+        <ul class="cal-activity__notes">
+          {% for note in event.day_notes %}
+          <li>
+            <time datetime="{{ note.date|date:'Y-m-d' }}">{{ note.label }}</time>
+            <span>{{ note.note }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% else %}
+  <section class="cal-empty">
+    <div class="cal-empty__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+    </div>
+    <p class="cal-empty__title">No school activities yet</p>
+    <p class="cal-empty__text">
+      When the school publishes activities, they will show up here with dates and details.
+    </p>
+  </section>
   {% endif %}
 </div>
 {% endblock %}

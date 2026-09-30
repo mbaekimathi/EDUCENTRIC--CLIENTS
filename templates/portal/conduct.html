@@ -4,23 +4,27 @@
 {% block header_title %}Student conduct{% endblock %}
 
 {% block content %}
-<div class="anim-rise mx-auto max-w-6xl space-y-6">
-  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
-    <header class="flex flex-wrap items-end justify-between gap-3 border-b border-ink-950/8 px-5 py-4 sm:px-6">
-      <div>
-        <h3 class="font-display text-xl font-semibold text-ink-950">Behaviour register</h3>
-        <p class="mt-0.5 text-sm text-ink-600">
-          Read-only conduct records for {{ student.display_name }}
+<div class="anim-rise mx-auto max-w-6xl space-y-5">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <p class="page-hero__eyebrow">Behaviour register</p>
+        <h2 class="page-hero__title">Student conduct</h2>
+        <p class="page-hero__lede">
+          Read-only conduct records for {{ student.display_name }}.
         </p>
       </div>
       {% if records %}
-      <div class="flex flex-wrap gap-2 text-xs font-semibold">
-        <span class="att-pill is-present">{{ good_count }} good</span>
-        <span class="att-pill is-absent">{{ bad_count }} concern{{ bad_count|pluralize }}</span>
+      <div class="page-hero__aside">
+        <span class="page-hero__chip">{{ good_count }} good</span>
+        <span class="page-hero__chip">{{ bad_count }} concern{{ bad_count|pluralize }}</span>
       </div>
       {% endif %}
-    </header>
+    </div>
+  </section>
 
+  <section class="portal-surface">
     {% if records %}
     <div class="overflow-x-auto">
       <table class="portal-table w-full min-w-[42rem] text-left text-sm">
@@ -65,9 +69,14 @@
       </table>
     </div>
     {% else %}
-    <div class="px-5 py-12 text-center sm:px-8">
-      <p class="font-display text-xl font-semibold text-ink-950">No conduct records yet</p>
-      <p class="mt-2 text-sm text-ink-600">
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">No conduct records yet</p>
+      <p class="portal-empty__text">
         When teachers register good or concerning behaviour for {{ student.display_name }}, it will appear here.
       </p>
     </div>

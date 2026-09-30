@@ -4,28 +4,114 @@
 {% block header_title %}Finances{% endblock %}
 
 {% block content %}
-<div class="anim-rise mx-auto max-w-6xl space-y-6">
-  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
-    <div class="grid gap-3 sm:grid-cols-3">
-      <div class="rounded-2xl bg-ink-950/[0.03] px-4 py-3">
-        <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Charged</p>
-        <p class="mt-1 font-display text-xl font-semibold">KES {{ total_charged|floatformat:2 }}</p>
-      </div>
-      <div class="rounded-2xl bg-ink-950/[0.03] px-4 py-3">
-        <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Paid</p>
-        <p class="mt-1 font-display text-xl font-semibold">KES {{ total_paid|floatformat:2 }}</p>
-      </div>
-      <div class="rounded-2xl bg-brand-soft px-4 py-3">
-        <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Balance</p>
-        <p class="mt-1 font-display text-xl font-semibold text-brand">KES {{ balance|floatformat:2 }}</p>
+<div class="anim-rise mx-auto max-w-6xl space-y-5">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <p class="page-hero__eyebrow">Fees &amp; payments</p>
+        <h2 class="page-hero__title">Finances</h2>
+        <p class="page-hero__lede">
+          Charges, receipts, and balance for {{ student.display_name }}.
+        </p>
       </div>
     </div>
   </section>
 
-  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
-    <div class="border-b border-ink-950/8 px-5 py-4 sm:px-7">
-      <h3 class="font-display text-lg font-semibold text-ink-950">Charges</h3>
+  <section class="portal-surface p-5 sm:p-6">
+    <div class="metric-strip">
+      <div class="metric-tile">
+        <span class="metric-tile__label">Charged</span>
+        <span class="metric-tile__value" id="finance-charged">KES {{ total_charged|floatformat:2 }}</span>
+      </div>
+      <div class="metric-tile is-good">
+        <span class="metric-tile__label">Paid</span>
+        <span class="metric-tile__value" id="finance-paid">KES {{ total_paid|floatformat:2 }}</span>
+      </div>
+      <div class="metric-tile {% if balance <= 0 %}is-good{% else %}is-warn is-accent{% endif %}" id="finance-balance-tile">
+        <span class="metric-tile__label">Balance</span>
+        <span class="metric-tile__value" id="finance-balance">KES {{ balance|floatformat:2 }}</span>
+      </div>
     </div>
+  </section>
+
+  {% if is_parent %}
+  <section class="portal-surface" id="pay-fees-panel">
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Pay fees</h3>
+        <p class="portal-surface__lede">
+          Enter an amount and send an M-Pesa STK prompt to your phone
+          {% if pay_phone_display %}({{ pay_phone_display }}){% endif %}.
+        </p>
+      </div>
+    </header>
+
+    <div class="px-5 pb-5 sm:px-6 sm:pb-6">
+      {% if can_pay_fees %}
+      <form id="parent-stk-form" class="pay-fees-form" novalidate>
+        {% csrf_token %}
+        <div class="pay-fees-form__row">
+          <label class="pay-fees-field">
+            <span class="pay-fees-field__label">Amount (KES)</span>
+            <input
+              type="number"
+              name="amount"
+              id="pay-amount"
+              class="pay-fees-field__input"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              required
+              placeholder="{% if balance > 0 %}{{ balance|floatformat:0 }}{% else %}e.g. 1000{% endif %}"
+              value="{% if balance > 0 %}{{ balance|floatformat:0 }}{% endif %}"
+              autocomplete="off"
+            >
+            <span class="pay-fees-field__hint">
+              Prompt goes only to your profile number · whole shillings
+            </span>
+          </label>
+
+          <div class="pay-fees-field">
+            <span class="pay-fees-field__label">M-Pesa phone</span>
+            <p class="pay-fees-phone" id="pay-phone-display">{{ pay_phone_display }}</p>
+            <span class="pay-fees-field__hint">Locked to your guardian profile</span>
+          </div>
+        </div>
+
+        <div class="pay-fees-actions">
+          <button type="submit" class="pay-fees-submit" id="pay-submit">
+            Send STK prompt
+          </button>
+        </div>
+
+        <div id="pay-stk-status" class="pay-stk-status" hidden role="status" aria-live="polite">
+          <p class="pay-stk-status__title" id="pay-stk-status-title">Waiting for M-Pesa…</p>
+          <p class="pay-stk-status__copy" id="pay-stk-status-copy">
+            Enter your M-Pesa PIN on the phone. This page updates when Safaricom confirms.
+          </p>
+          <p class="pay-stk-status__ref" id="pay-stk-status-ref"></p>
+        </div>
+      </form>
+      {% else %}
+      <div class="portal-empty portal-empty--compact">
+        <p class="portal-empty__title">Payment prompt unavailable</p>
+        <p class="portal-empty__text">
+          {{ stk_unavailable_reason|default:"M-Pesa STK Push is not available right now." }}
+        </p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="portal-surface">
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Charges</h3>
+        <p class="portal-surface__lede">Fee items posted to this learner</p>
+      </div>
+    </header>
     {% if charges %}
     <div class="overflow-x-auto">
       <table class="portal-table w-full min-w-[44rem] text-left text-sm">
@@ -63,17 +149,27 @@
       </table>
     </div>
     {% else %}
-    <div class="px-5 py-10 text-center sm:px-8">
-      <p class="font-display text-lg font-semibold text-ink-950">No fee charges yet</p>
-      <p class="mt-2 text-sm text-ink-600">When the accounts office posts fees for {{ student.display_name }}, they will appear here.</p>
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2m0-8V6m0 12v-2m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">No fee charges yet</p>
+      <p class="portal-empty__text">
+        When the accounts office posts fees for {{ student.display_name }}, they will appear here.
+      </p>
     </div>
     {% endif %}
   </section>
 
-  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
-    <div class="border-b border-ink-950/8 px-5 py-4 sm:px-7">
-      <h3 class="font-display text-lg font-semibold text-ink-950">Payments</h3>
-    </div>
+  <section class="portal-surface">
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Payments</h3>
+        <p class="portal-surface__lede">Receipts recorded against this account</p>
+      </div>
+    </header>
     {% if payments %}
     <div class="overflow-x-auto">
       <table class="portal-table w-full min-w-[36rem] text-left text-sm">
@@ -100,11 +196,198 @@
       </table>
     </div>
     {% else %}
-    <div class="px-5 py-10 text-center sm:px-8">
-      <p class="font-display text-lg font-semibold text-ink-950">No payments recorded</p>
-      <p class="mt-2 text-sm text-ink-600">Receipts for this learner will list here after payment is recorded in accounts.</p>
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">No payments recorded</p>
+      <p class="portal-empty__text">
+        Receipts for this learner will list here after payment is recorded in accounts.
+      </p>
     </div>
     {% endif %}
   </section>
 </div>
+
+{% if is_parent and can_pay_fees %}
+<script>
+(function () {
+  var form = document.getElementById("parent-stk-form");
+  if (!form) return;
+
+  var amountInput = document.getElementById("pay-amount");
+  var submitBtn = document.getElementById("pay-submit");
+  var statusBox = document.getElementById("pay-stk-status");
+  var statusTitle = document.getElementById("pay-stk-status-title");
+  var statusCopy = document.getElementById("pay-stk-status-copy");
+  var statusRef = document.getElementById("pay-stk-status-ref");
+  var initiateUrl = "{% url 'portal:finances_stk_initiate' %}";
+  var statusUrlTpl = "{% url 'portal:finances_stk_status' stk_id=0 %}";
+  var pollTimer = null;
+  var busy = false;
+
+  function statusUrl(stkId) {
+    return statusUrlTpl.replace("/stk/0/", "/stk/" + stkId + "/");
+  }
+
+  function setStatus(visible, title, copy, refText, tone) {
+    statusBox.hidden = !visible;
+    statusBox.classList.remove("is-ok", "is-err", "is-wait");
+    if (tone) statusBox.classList.add(tone);
+    statusTitle.textContent = title || "";
+    statusCopy.textContent = copy || "";
+    statusRef.textContent = refText || "";
+  }
+
+  function setBusy(on) {
+    busy = on;
+    amountInput.disabled = on;
+    submitBtn.disabled = on;
+    submitBtn.textContent = on ? "Sending…" : "Send STK prompt";
+  }
+
+  function updateTotals(stk) {
+    if (!stk) return;
+    if (stk.total_charged != null) {
+      document.getElementById("finance-charged").textContent = "KES " + stk.total_charged;
+    }
+    if (stk.total_paid != null) {
+      document.getElementById("finance-paid").textContent = "KES " + stk.total_paid;
+    }
+    if (stk.balance != null) {
+      document.getElementById("finance-balance").textContent = "KES " + stk.balance;
+      var tile = document.getElementById("finance-balance-tile");
+      var bal = parseFloat(stk.balance);
+      tile.classList.toggle("is-good", bal <= 0);
+      tile.classList.toggle("is-warn", bal > 0);
+      tile.classList.toggle("is-accent", bal > 0);
+    }
+  }
+
+  function clearPoll() {
+    if (pollTimer) {
+      window.clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function schedulePoll(stkId, delayMs) {
+    clearPoll();
+    pollTimer = window.setTimeout(function () { pollStatus(stkId); }, delayMs);
+  }
+
+  function pollStatus(stkId) {
+    fetch(statusUrl(stkId), {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" }
+    })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        var data = result.data || {};
+        var stk = data.stk || {};
+        if (!result.ok || !data.ok) {
+          setStatus(true, "Could not check status", (data.error || "Try again shortly."), "", "is-err");
+          setBusy(false);
+          return;
+        }
+        if (data.success) {
+          clearPoll();
+          setBusy(false);
+          updateTotals(stk);
+          setStatus(
+            true,
+            "Payment received",
+            "KES " + stk.amount + " paid. Receipt " + (stk.mpesa_receipt || "recorded") + ".",
+            stk.checkout_request_id || "",
+            "is-ok"
+          );
+          submitBtn.textContent = "Pay again";
+          return;
+        }
+        if (data.failed || data.done) {
+          clearPoll();
+          setBusy(false);
+          setStatus(
+            true,
+            stk.cancelled ? "Payment cancelled" : "Payment not completed",
+            stk.failure_message || stk.result_desc || "No payment was received.",
+            stk.checkout_request_id || "",
+            "is-err"
+          );
+          return;
+        }
+        setStatus(
+          true,
+          "Waiting for M-Pesa…",
+          stk.result_desc || "Enter your M-Pesa PIN on the phone.",
+          stk.checkout_request_id || "",
+          "is-wait"
+        );
+        schedulePoll(stkId, 2800);
+      })
+      .catch(function () {
+        setStatus(true, "Network error", "Could not reach the server. Retrying…", "", "is-wait");
+        schedulePoll(stkId, 4000);
+      });
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    if (busy) return;
+
+    var amount = (amountInput.value || "").trim();
+    if (!amount || Number(amount) < 1) {
+      setStatus(true, "Enter an amount", "Type how much you want to pay in Kenyan shillings.", "", "is-err");
+      amountInput.focus();
+      return;
+    }
+
+    clearPoll();
+    setBusy(true);
+    setStatus(
+      true,
+      "Sending STK prompt…",
+      "Check your phone for the M-Pesa PIN request.",
+      "",
+      "is-wait"
+    );
+
+    var body = new FormData(form);
+    fetch(initiateUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+      body: body
+    })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        var data = result.data || {};
+        if (!result.ok || !data.ok) {
+          setBusy(false);
+          setStatus(true, "Could not send prompt", data.error || "Try again.", "", "is-err");
+          return;
+        }
+        var stk = data.stk || {};
+        setStatus(
+          true,
+          "STK prompt sent",
+          data.message || "Enter your M-Pesa PIN on the phone.",
+          stk.checkout_request_id || "",
+          "is-wait"
+        );
+        submitBtn.textContent = "Waiting…";
+        if (stk.id) schedulePoll(stk.id, 2200);
+        else setBusy(false);
+      })
+      .catch(function () {
+        setBusy(false);
+        setStatus(true, "Network error", "Could not send the STK prompt. Check your connection.", "", "is-err");
+      });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -6,18 +6,20 @@
 
 {% block content %}
 <div class="anim-rise mx-auto max-w-3xl space-y-5">
-  <section class="{% if portal_role == 'parent' %}parent-panel{% else %}border border-ink-950/8 bg-white/90 shadow-panel backdrop-blur{% endif %} overflow-hidden rounded-[1.5rem]">
-    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}border-b border-ink-950/8 px-5 py-4 sm:px-6{% endif %}">
-      <h2 class="font-display text-xl text-ink-950 {% if portal_role != 'parent' %}font-semibold{% endif %}">
-        {% if can_edit %}Your guardian profile{% else %}Your learner profile{% endif %}
-      </h2>
-      <p class="mt-0.5 text-sm text-ink-600">
-        {% if can_edit %}
-          Update your contact details and profile photo.
-        {% else %}
-          View your school record. Only parents/guardians can edit profile details here.
-        {% endif %}
-      </p>
+  <section class="{% if portal_role == 'parent' %}parent-panel{% else %}portal-surface{% endif %}">
+    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}portal-surface__head{% endif %}">
+      <div>
+        <h2 class="{% if portal_role == 'parent' %}font-display text-xl text-ink-950{% else %}portal-surface__title{% endif %}">
+          {% if can_edit %}Your guardian profile{% else %}Your learner profile{% endif %}
+        </h2>
+        <p class="{% if portal_role == 'parent' %}mt-0.5 text-sm text-ink-600{% else %}portal-surface__lede{% endif %}">
+          {% if can_edit %}
+            Update your contact details and profile photo.
+          {% else %}
+            View your school record. Only parents/guardians can edit profile details here.
+          {% endif %}
+        </p>
+      </div>
     </header>
 
     <div class="px-5 py-5 sm:px-6 sm:py-6">
