@@ -1,10 +1,11 @@
-"""Helpers to load attendance, exam results, and timetable for a portal student."""
+"""Helpers to load attendance, exam results, timetable, and conduct for a portal student."""
 
 from __future__ import annotations
 
 import re
 from collections import OrderedDict
 
+from .activity_models import StudentConductRecord
 from .curriculum_models import (
     AcademicClass,
     AcademicLevel,
@@ -171,6 +172,11 @@ def student_results(student: Student):
             },
         )
         out_of = out_of_by_area.get(mark.learning_area_id) or mark.learning_area.total_marks or 100
+        # Marks are often stored on the learning-area scale (e.g. 100) even when a
+        # paper setting lists a smaller out_of — don't inflate percentages.
+        area_total = mark.learning_area.total_marks or 100
+        if mark.marks > out_of:
+            out_of = area_total if area_total >= mark.marks else max(out_of, mark.marks)
         percent = round((mark.marks * 100) / out_of) if out_of else None
         grade = _grade_for_percent(percent, level)
         exam["rows"].append(
@@ -206,6 +212,108 @@ def student_results(student: Student):
         "exams": exam_list,
         "academic_class": academic_class_for_student(student),
         "level": level,
+    }
+
+
+def results_comparison_table(exams: list[dict]) -> dict:
+    """One subject-row × exam-column grid of percentages for side-by-side comparison."""
+    if not exams:
+        return {"exam_columns": [], "subject_rows": [], "average_row": []}
+
+    # Oldest → newest so comparison reads left-to-right with the trend chart.
+    columns = list(reversed(exams))
+    exam_columns = [
+        {
+            "id": exam["generation"].pk,
+            "name": exam["generation"].display_name,
+            "average_percent": exam["average_percent"],
+        }
+        for exam in columns
+    ]
+
+    subjects: OrderedDict[int, dict] = OrderedDict()
+    for exam in columns:
+        for row in exam["rows"]:
+            subject = row["subject"]
+            subjects.setdefault(
+                subject.pk,
+                {
+                    "id": subject.pk,
+                    "name": subject.name,
+                    "code": subject.code,
+                    "order": getattr(subject, "display_order", 0) or 0,
+                    "scores": {},
+                },
+            )
+            subjects[subject.pk]["scores"][exam["generation"].pk] = row["percent"]
+
+    subject_rows = []
+    for subject in sorted(subjects.values(), key=lambda item: (item["order"], item["name"])):
+        cells = [
+            subject["scores"].get(column["id"]) for column in exam_columns
+        ]
+        subject_rows.append(
+            {
+                "name": subject["name"],
+                "code": subject["code"],
+                "percents": cells,
+            }
+        )
+
+    average_row = [exam["average_percent"] for exam in columns]
+    return {
+        "exam_columns": exam_columns,
+        "subject_rows": subject_rows,
+        "average_row": average_row,
+    }
+
+
+def results_chart_payload(exams: list[dict], *, mode: str = "all") -> dict:
+    """Build Chart.js-ready labels/datasets for exam averages or a single exam's subjects."""
+    if mode == "all":
+        chronological = list(reversed(exams))
+        labels = [exam["generation"].display_name for exam in chronological]
+        averages = [
+            exam["average_percent"] if exam["average_percent"] is not None else None
+            for exam in chronological
+        ]
+        return {
+            "mode": "all",
+            "type": "line",
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Exam average %",
+                    "data": averages,
+                }
+            ],
+            "y_label": "Average %",
+        }
+
+    exam = exams[0] if exams else None
+    if exam is None:
+        return {
+            "mode": "exam",
+            "type": "bar",
+            "labels": [],
+            "datasets": [{"label": "Score %", "data": []}],
+            "y_label": "Score %",
+        }
+
+    labels = [row["subject"].name for row in exam["rows"]]
+    percents = [row["percent"] if row["percent"] is not None else None for row in exam["rows"]]
+    return {
+        "mode": "exam",
+        "type": "bar",
+        "labels": labels,
+        "datasets": [
+            {
+                "label": "Score %",
+                "data": percents,
+            }
+        ],
+        "y_label": "Score %",
+        "exam_name": exam["generation"].display_name,
     }
 
 
@@ -277,4 +385,28 @@ def student_timetable(student: Student):
         "day_labels": WEEKDAY_LABELS,
         "periods": periods,
         "rows": rows,
+    }
+
+
+def student_conduct(student: Student, limit: int = 80):
+    records = list(
+        StudentConductRecord.objects.filter(student=student).order_by(
+            "-incident_date", "-created_at"
+        )[:limit]
+    )
+    good_count = sum(
+        1
+        for record in records
+        if record.behaviour_type == StudentConductRecord.BehaviourType.GOOD
+    )
+    bad_count = sum(
+        1
+        for record in records
+        if record.behaviour_type == StudentConductRecord.BehaviourType.BAD
+    )
+    return {
+        "records": records,
+        "total_count": len(records),
+        "good_count": good_count,
+        "bad_count": bad_count,
     }

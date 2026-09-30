@@ -6,10 +6,13 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from . import dashboard as portal_dashboard
+from . import profile as portal_profile
 from . import session as portal_session
 from . import student_records
 from . import elearning as elearning_service
 from .finance_models import student_finance_summary
+from .forms import ParentProfileForm
 from .models import Student
 
 
@@ -148,11 +151,13 @@ def dashboard(request):
     if denied:
         return denied
 
+    overview = portal_dashboard.student_dashboard(student)
     return render(
         request,
         "portal/dashboard.html",
         {
             "student": student,
+            **overview,
         },
     )
 
@@ -173,15 +178,59 @@ def attendance(request):
 
 @portal_session.portal_login_required
 @require_GET
+def conduct(request):
+    student, denied = _portal_student_or_redirect(request)
+    if denied:
+        return denied
+    data = student_records.student_conduct(student)
+    return render(
+        request,
+        "portal/conduct.html",
+        {"student": student, **data},
+    )
+
+
+@portal_session.portal_login_required
+@require_GET
 def results(request):
     student, denied = _portal_student_or_redirect(request)
     if denied:
         return denied
     data = student_records.student_results(student)
+    all_exams = data["exams"]
+
+    selected_raw = (request.GET.get("exam") or "all").strip()
+    selected_exam = "all"
+    visible_exams = all_exams
+    if selected_raw != "all":
+        try:
+            exam_id = int(selected_raw)
+        except (TypeError, ValueError):
+            exam_id = None
+        matched = [exam for exam in all_exams if exam["generation"].pk == exam_id]
+        if matched:
+            selected_exam = str(exam_id)
+            visible_exams = matched
+
+    chart_source = visible_exams if selected_exam != "all" else all_exams
+    chart_data = student_records.results_chart_payload(
+        chart_source,
+        mode="all" if selected_exam == "all" else "exam",
+    )
+    comparison = student_records.results_comparison_table(visible_exams)
+
     return render(
         request,
         "portal/results.html",
-        {"student": student, **data},
+        {
+            "student": student,
+            **data,
+            "exams": visible_exams,
+            "all_exams": all_exams,
+            "selected_exam": selected_exam,
+            "chart_data": chart_data,
+            "comparison": comparison,
+        },
     )
 
 
@@ -195,6 +244,20 @@ def timetable(request):
     return render(
         request,
         "portal/timetable.html",
+        {"student": student, **data},
+    )
+
+
+@portal_session.portal_login_required
+@require_GET
+def academic_calendar(request):
+    student, denied = _portal_student_or_redirect(request)
+    if denied:
+        return denied
+    data = portal_dashboard.academic_calendar_timeline(student=student)
+    return render(
+        request,
+        "portal/academic_calendar.html",
         {"student": student, **data},
     )
 
@@ -265,3 +328,82 @@ def switch_student(request):
     if next_url.startswith("/") and not next_url.startswith("//"):
         return redirect(next_url)
     return redirect(settings.PORTAL_LOGIN_REDIRECT_URL)
+
+
+@portal_session.portal_login_required
+@require_http_methods(["GET", "POST"])
+def profile_settings(request):
+    """Account profile: parents can edit; students can view only."""
+    student, denied = _portal_student_or_redirect(request)
+    if denied:
+        return denied
+
+    is_parent = (
+        request.portal_role == portal_session.ROLE_PARENT and request.portal_parent is not None
+    )
+    parent = request.portal_parent if is_parent else None
+    form = None
+
+    if is_parent:
+        if request.method == "POST":
+            form = ParentProfileForm(request.POST, request.FILES, parent=parent)
+            if form.is_valid():
+                image_error = portal_profile.validate_profile_image(
+                    form.cleaned_data.get("profile_image")
+                )
+                if image_error:
+                    form.add_error("profile_image", image_error)
+                else:
+                    parent.full_name = form.cleaned_data["full_name"]
+                    parent.relationship_to_student = form.cleaned_data["relationship_to_student"]
+                    parent.phone_number = form.cleaned_data["phone_number"]
+                    parent.email = form.cleaned_data["email"]
+
+                    update_fields = [
+                        "full_name",
+                        "relationship_to_student",
+                        "phone_number",
+                        "email",
+                    ]
+                    uploaded = form.cleaned_data.get("profile_image")
+                    clear_image = form.cleaned_data.get("clear_profile_image")
+
+                    if uploaded:
+                        old_name = parent.profile_image
+                        parent.profile_image = portal_profile.store_profile_image(uploaded)
+                        update_fields.append("profile_image")
+                        if old_name and old_name != parent.profile_image:
+                            portal_profile.delete_stored_image(old_name)
+                    elif clear_image and parent.profile_image:
+                        portal_profile.delete_stored_image(parent.profile_image)
+                        parent.profile_image = ""
+                        update_fields.append("profile_image")
+
+                    parent.save(update_fields=update_fields)
+                    messages.success(request, "Your profile has been updated.")
+                    return redirect("portal:profile_settings")
+        else:
+            form = ParentProfileForm(parent=parent)
+
+    avatar_url = portal_profile.account_avatar_url(
+        role=request.portal_role,
+        parent=parent,
+        student=student,
+    )
+
+    return render(
+        request,
+        "portal/profile_settings.html",
+        {
+            "student": student,
+            "parent": parent,
+            "form": form,
+            "can_edit": is_parent,
+            "avatar_url": avatar_url,
+            "avatar_initial": portal_profile.account_initial(
+                role=request.portal_role,
+                parent=parent,
+                student=student,
+            ),
+        },
+    )

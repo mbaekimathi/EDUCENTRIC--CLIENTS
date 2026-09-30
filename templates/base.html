@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="{% if portal_role == 'parent' %}#0f766e{% else %}{{ brand.primary_color }}{% endif %}">
+  <meta name="theme-color" content="{{ brand.primary_color }}">
   <title>{% block title %}{{ brand.school_display }} Portal{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,15 +20,9 @@
         extend: {
           colors: {
             brand: {
-              {% if portal_role == 'parent' %}
-              DEFAULT: '#0f766e',
-              soft: 'color-mix(in srgb, #0f766e 12%, white)',
-              deep: '#115e59',
-              {% else %}
               DEFAULT: '{{ brand.primary_color }}',
               soft: 'color-mix(in srgb, {{ brand.primary_color }} 12%, white)',
-              deep: 'color-mix(in srgb, {{ brand.primary_color }} 78%, black)',
-              {% endif %}
+              deep: '#1638a8',
             },
             ink: {
               950: '#0f1419',
@@ -48,7 +42,7 @@
           },
           boxShadow: {
             panel: '0 24px 60px -28px rgba(15, 20, 25, 0.45)',
-            glow: '0 18px 50px -24px rgba(15, 118, 110, 0.55)',
+            glow: '0 18px 50px -24px rgba(31, 92, 240, 0.55)',
           }
         }
       }

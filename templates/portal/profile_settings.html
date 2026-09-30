@@ -1,0 +1,146 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}Profile settings · {{ brand.school_display }}{% endblock %}
+
+{% block header_title %}Profile settings{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-3xl space-y-5">
+  <section class="{% if portal_role == 'parent' %}parent-panel{% else %}border border-ink-950/8 bg-white/90 shadow-panel backdrop-blur{% endif %} overflow-hidden rounded-[1.5rem]">
+    <header class="{% if portal_role == 'parent' %}parent-panel__head{% else %}border-b border-ink-950/8 px-5 py-4 sm:px-6{% endif %}">
+      <h2 class="font-display text-xl text-ink-950 {% if portal_role != 'parent' %}font-semibold{% endif %}">
+        {% if can_edit %}Your guardian profile{% else %}Your learner profile{% endif %}
+      </h2>
+      <p class="mt-0.5 text-sm text-ink-600">
+        {% if can_edit %}
+          Update your contact details and profile photo.
+        {% else %}
+          View your school record. Only parents/guardians can edit profile details here.
+        {% endif %}
+      </p>
+    </header>
+
+    <div class="px-5 py-5 sm:px-6 sm:py-6">
+      <div class="profile-hero">
+        <div class="profile-hero__avatar" aria-hidden="true">
+          {% if avatar_url %}
+            <img src="{{ avatar_url }}" alt="" class="h-full w-full object-cover">
+          {% else %}
+            <span class="profile-hero__initial">{{ avatar_initial }}</span>
+          {% endif %}
+        </div>
+        <div class="min-w-0">
+          <p class="truncate font-display text-2xl text-ink-950">
+            {% if can_edit and parent %}
+              {{ parent.full_name }}
+            {% else %}
+              {{ student.display_name }}
+            {% endif %}
+          </p>
+          <p class="mt-1 text-sm text-ink-500">
+            {% if can_edit %}
+              Guardian · {{ brand.school_display }}
+            {% else %}
+              Learner · {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
+            {% endif %}
+          </p>
+        </div>
+      </div>
+
+      {% if can_edit and form %}
+      <form method="post" enctype="multipart/form-data" class="mt-6 space-y-5" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800" role="alert">
+          {{ form.non_field_errors }}
+        </div>
+        {% endif %}
+
+        <div class="profile-photo-card">
+          <div>
+            <p class="text-sm font-semibold text-ink-950">Profile photo</p>
+            <p class="mt-0.5 text-xs text-ink-500">JPG, PNG, WEBP or GIF · max 2 MB</p>
+          </div>
+          <div class="profile-photo-card__controls">
+            {{ form.profile_image }}
+            {% if form.profile_image.errors %}
+            <p class="text-xs text-red-700">{{ form.profile_image.errors|striptags }}</p>
+            {% endif %}
+            {% if avatar_url %}
+            <label class="profile-clear">
+              {{ form.clear_profile_image }}
+              <span>Remove current photo</span>
+            </label>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="profile-form-grid">
+          <div class="profile-form-grid__wide">
+            <label class="profile-label" for="{{ form.full_name.id_for_label }}">{{ form.full_name.label }}</label>
+            {{ form.full_name }}
+            {% if form.full_name.errors %}<p class="profile-error">{{ form.full_name.errors|striptags }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="profile-label" for="{{ form.relationship_to_student.id_for_label }}">{{ form.relationship_to_student.label }}</label>
+            {{ form.relationship_to_student }}
+            {% if form.relationship_to_student.errors %}<p class="profile-error">{{ form.relationship_to_student.errors|striptags }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="profile-label" for="{{ form.phone_number.id_for_label }}">{{ form.phone_number.label }}</label>
+            {{ form.phone_number }}
+            {% if form.phone_number.errors %}<p class="profile-error">{{ form.phone_number.errors|striptags }}</p>{% endif %}
+          </div>
+          <div class="profile-form-grid__wide">
+            <label class="profile-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+            {{ form.email }}
+            {% if form.email.errors %}<p class="profile-error">{{ form.email.errors|striptags }}</p>{% endif %}
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 pt-1">
+          <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            Save changes
+          </button>
+          <a href="{% url 'portal:dashboard' %}" class="text-sm font-medium text-ink-500 transition hover:text-brand">Cancel</a>
+        </div>
+      </form>
+      {% else %}
+      <dl class="parent-profile-grid mt-6 !px-0 !pb-0">
+        <div>
+          <dt>Full name</dt>
+          <dd>{{ student.display_name }}</dd>
+        </div>
+        <div>
+          <dt>Admission number</dt>
+          <dd>{{ student.admission_number|default:"—" }}</dd>
+        </div>
+        <div>
+          <dt>Assessment number</dt>
+          <dd>{{ student.assessment_number }}</dd>
+        </div>
+        <div>
+          <dt>Class</dt>
+          <dd>{{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}</dd>
+        </div>
+        <div>
+          <dt>Gender</dt>
+          <dd>{{ student.get_gender_display }}</dd>
+        </div>
+        <div>
+          <dt>Date of birth</dt>
+          <dd>{{ student.date_of_birth|date:"j M Y" }}</dd>
+        </div>
+        {% if student.parent_guardian %}
+        <div class="parent-profile-grid__wide">
+          <dt>Linked guardian</dt>
+          <dd>{{ student.parent_guardian.full_name }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}Student conduct · {{ brand.school_display }}{% endblock %}
+{% block header_title %}Student conduct{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-6xl space-y-6">
+  <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
+    <header class="flex flex-wrap items-end justify-between gap-3 border-b border-ink-950/8 px-5 py-4 sm:px-6">
+      <div>
+        <h3 class="font-display text-xl font-semibold text-ink-950">Behaviour register</h3>
+        <p class="mt-0.5 text-sm text-ink-600">
+          Read-only conduct records for {{ student.display_name }}
+        </p>
+      </div>
+      {% if records %}
+      <div class="flex flex-wrap gap-2 text-xs font-semibold">
+        <span class="att-pill is-present">{{ good_count }} good</span>
+        <span class="att-pill is-absent">{{ bad_count }} concern{{ bad_count|pluralize }}</span>
+      </div>
+      {% endif %}
+    </header>
+
+    {% if records %}
+    <div class="overflow-x-auto">
+      <table class="portal-table w-full min-w-[42rem] text-left text-sm">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Witness</th>
+            <th>Rating</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in records %}
+          <tr>
+            <td>
+              <span class="font-semibold text-ink-950">{{ record.incident_date|date:"D, j M Y" }}</span>
+            </td>
+            <td>
+              <span class="att-pill {% if record.behaviour_type == 'GOOD' %}is-present{% else %}is-conduct-bad{% endif %}">
+                {{ record.get_behaviour_type_display }}
+              </span>
+            </td>
+            <td>
+              <span class="text-ink-800">{{ record.description }}</span>
+            </td>
+            <td>
+              <span class="text-ink-600">{{ record.witness }}</span>
+            </td>
+            <td>
+              <span class="font-semibold text-ink-950">{{ record.rating }}/5</span>
+              <span class="mt-0.5 block text-[11px] text-ink-400">{{ record.rating_label }}</span>
+            </td>
+            <td>
+              <span class="text-ink-800">{{ record.consequence_or_reward }}</span>
+              <span class="mt-0.5 block text-[11px] text-ink-400">{{ record.outcome_label }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="px-5 py-12 text-center sm:px-8">
+      <p class="font-display text-xl font-semibold text-ink-950">No conduct records yet</p>
+      <p class="mt-2 text-sm text-ink-600">
+        When teachers register good or concerning behaviour for {{ student.display_name }}, it will appear here.
+      </p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

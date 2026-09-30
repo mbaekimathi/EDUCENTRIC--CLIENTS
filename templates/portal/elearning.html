@@ -5,14 +5,6 @@
 
 {% block content %}
 <div class="anim-rise mx-auto max-w-6xl space-y-6">
-  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
-    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-ink-400">Digital classroom</p>
-    <h2 class="mt-1 font-display text-2xl font-semibold text-ink-950 sm:text-3xl">{{ student.display_name }}</h2>
-    <p class="mt-1 text-sm text-ink-600">
-      {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
-    </p>
-  </section>
-
   <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
     <div class="border-b border-ink-950/8 px-5 py-4 sm:px-7">
       <h3 class="font-display text-lg font-semibold text-ink-950">Subjects</h3>

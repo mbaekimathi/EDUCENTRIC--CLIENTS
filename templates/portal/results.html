@@ -3,77 +3,205 @@
 {% block title %}Results · {{ brand.school_display }}{% endblock %}
 {% block header_title %}Results{% endblock %}
 
+{% block app_extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="anim-rise mx-auto max-w-6xl space-y-6">
-  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
-    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-ink-400">Exam performance</p>
-    <h2 class="mt-1 font-display text-2xl font-semibold text-ink-950 sm:text-3xl">{{ student.display_name }}</h2>
-    <p class="mt-1 text-sm text-ink-600">
-      {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
-      {% if academic_class %} · {{ academic_class.code }}{% endif %}
-    </p>
+  {% if all_exams %}
+  <section class="rounded-3xl border border-white/70 bg-white/90 px-5 py-4 shadow-panel backdrop-blur sm:px-7">
+    <form method="get" action="{% url 'portal:results' %}" class="results-filter">
+      <label for="exam-filter" class="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-ink-400">View</label>
+      <select
+        id="exam-filter"
+        name="exam"
+        class="results-filter__select"
+        onchange="this.form.submit()"
+      >
+        <option value="all" {% if selected_exam == "all" %}selected{% endif %}>All exams</option>
+        {% for exam in all_exams %}
+        <option value="{{ exam.generation.pk }}" {% if selected_exam == exam.generation.pk|stringformat:"d" %}selected{% endif %}>
+          {{ exam.generation.display_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
   </section>
 
-  {% if exams %}
-    {% for exam in exams %}
-    <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
-      <div class="flex flex-col gap-3 border-b border-ink-950/8 bg-ink-950/[0.02] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
-        <div>
-          <h3 class="font-display text-lg font-semibold text-ink-950">{{ exam.generation.display_name }}</h3>
-          <p class="mt-0.5 text-xs text-ink-400">
-            {% if exam.generation.academic_year %}{{ exam.generation.academic_year.name }}{% endif %}
-            {% if exam.generation.academic_term %} · {{ exam.generation.academic_term.name }}{% endif %}
-            {% if exam.generation.start_date %} · {{ exam.generation.start_date|date:"j M Y" }}{% if exam.generation.end_date %}–{{ exam.generation.end_date|date:"j M Y" }}{% endif %}{% endif %}
-          </p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="rounded-2xl bg-brand-soft px-4 py-2 text-right">
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Average</p>
-            <p class="font-display text-lg font-semibold text-brand">
-              {% if exam.average_percent is not None %}{{ exam.average_percent }}%{% else %}—{% endif %}
-              {% if exam.average_grade %}<span class="ml-1 text-sm text-ink-600">{{ exam.average_grade.code }}</span>{% endif %}
-            </p>
-          </div>
-        </div>
-      </div>
+  <section class="rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
+    <div class="border-b border-ink-950/8 bg-ink-950/[0.02] px-5 py-4 sm:px-7">
+      <h3 class="font-display text-lg font-semibold text-ink-950">
+        {% if selected_exam == "all" %}
+          Performance trend
+        {% else %}
+          Subject scores
+        {% endif %}
+      </h3>
+      <p class="mt-0.5 text-sm text-ink-600">
+        {% if selected_exam == "all" %}
+          Average percentage across exams (oldest → newest)
+        {% else %}
+          {{ chart_data.exam_name }} — score % by subject
+        {% endif %}
+      </p>
+    </div>
+    <div class="results-chart-wrap px-4 py-5 sm:px-7 sm:py-6">
+      <canvas id="results-trend-chart" aria-label="Results chart" role="img"></canvas>
+    </div>
+  </section>
 
-      <div class="overflow-x-auto">
-        <table class="portal-table w-full min-w-[40rem] text-left text-sm">
-          <thead>
-            <tr>
-              <th>Subject</th>
-              <th>Score</th>
-              <th>Out of</th>
-              <th>%</th>
-              <th>Grade</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in exam.rows %}
-            <tr>
-              <td>
-                <span class="font-semibold text-ink-950">{{ row.subject.name }}</span>
-                <span class="ml-1 text-xs text-ink-400">{{ row.subject.code }}</span>
-              </td>
-              <td class="font-semibold">{{ row.marks }}</td>
-              <td>{{ row.out_of }}</td>
-              <td>{% if row.percent is not None %}{{ row.percent }}%{% else %}—{% endif %}</td>
-              <td>
-                {% if row.grade %}
-                <span class="att-pill is-grade" title="{{ row.grade.mark_level }} — {{ row.grade.meaning }}">
-                  {{ row.grade.code }}
-                </span>
-                {% else %}
-                —
-                {% endif %}
-              </td>
-            </tr>
+  <section class="rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
+    <div class="border-b border-ink-950/8 bg-ink-950/[0.02] px-5 py-4 sm:px-7">
+      <h3 class="font-display text-lg font-semibold text-ink-950">Raw data</h3>
+      <p class="mt-0.5 text-sm text-ink-600">
+        Subject percentages
+        {% if comparison.exam_columns|length > 1 %}compared across exams{% else %}for the selected exam{% endif %}
+      </p>
+    </div>
+
+    {% if comparison.subject_rows %}
+    <div class="results-compare-scroll">
+      <table class="portal-table results-compare-table text-left text-sm">
+        <thead>
+          <tr>
+            <th scope="col">Subject</th>
+            {% for col in comparison.exam_columns %}
+            <th scope="col" class="text-center">{{ col.name }}</th>
             {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-    {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in comparison.subject_rows %}
+          <tr>
+            <th scope="row">
+              <span class="font-semibold text-ink-950">{{ row.name }}</span>
+              {% if row.code %}<span class="ml-1 text-xs font-normal text-ink-400">{{ row.code }}</span>{% endif %}
+            </th>
+            {% for percent in row.percents %}
+            <td class="text-center font-semibold tabular-nums text-ink-950">
+              {% if percent != None %}{{ percent }}%{% else %}<span class="font-normal text-ink-400">—</span>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+          <tr class="results-compare-table__avg">
+            <th scope="row" class="font-semibold text-ink-950">Average</th>
+            {% for percent in comparison.average_row %}
+            <td class="text-center font-semibold tabular-nums text-brand">
+              {% if percent != None %}{{ percent }}%{% else %}<span class="font-normal text-ink-400">—</span>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="px-5 py-10 text-center sm:px-7">
+      <p class="text-sm text-ink-600">No subject percentages available for this filter.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  {{ chart_data|json_script:"results-chart-data" }}
+  <script>
+    (function () {
+      const el = document.getElementById("results-chart-data");
+      const canvas = document.getElementById("results-trend-chart");
+      if (!el || !canvas || !window.Chart) return;
+
+      const payload = JSON.parse(el.textContent);
+      if (!payload.labels || !payload.labels.length) return;
+
+      const brand =
+        getComputedStyle(document.documentElement).getPropertyValue("--brand").trim() || "#1f5cf0";
+      const isLine = payload.type === "line";
+      const values = (payload.datasets || []).flatMap(function (ds) {
+        return (ds.data || []).filter(function (v) { return v != null; });
+      });
+      const dataMax = values.length ? Math.max.apply(null, values) : 100;
+      const yMax = Math.max(100, Math.ceil(dataMax / 10) * 10);
+
+      function hexToRgba(hex, alpha) {
+        const raw = (hex || "").replace("#", "").trim();
+        const full =
+          raw.length === 3
+            ? raw.split("").map(function (c) { return c + c; }).join("")
+            : raw;
+        if (full.length !== 6) return "rgba(31, 92, 240, " + alpha + ")";
+        const n = parseInt(full, 16);
+        return "rgba(" + ((n >> 16) & 255) + ", " + ((n >> 8) & 255) + ", " + (n & 255) + ", " + alpha + ")";
+      }
+
+      new Chart(canvas, {
+        type: payload.type || "line",
+        data: {
+          labels: payload.labels,
+          datasets: (payload.datasets || []).map(function (ds) {
+            return {
+              label: ds.label,
+              data: ds.data,
+              borderColor: brand,
+              backgroundColor: isLine ? hexToRgba(brand, 0.14) : hexToRgba(brand, 0.72),
+              borderWidth: isLine ? 2.5 : 0,
+              fill: isLine,
+              tension: 0.35,
+              pointRadius: isLine ? 4 : 0,
+              pointHoverRadius: isLine ? 6 : 0,
+              pointBackgroundColor: brand,
+              borderRadius: isLine ? 0 : 10,
+              maxBarThickness: 48,
+            };
+          }),
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  const v = ctx.parsed.y;
+                  return v == null ? "—" : ctx.dataset.label + ": " + v + "%";
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: "#8b95a5",
+                font: { size: 11, weight: "600" },
+                maxRotation: 40,
+                minRotation: 0,
+              },
+            },
+            y: {
+              beginAtZero: true,
+              max: yMax,
+              title: {
+                display: true,
+                text: payload.y_label || "%",
+                color: "#8b95a5",
+                font: { size: 11, weight: "600" },
+              },
+              grid: { color: "rgba(15, 20, 25, 0.06)" },
+              ticks: {
+                color: "#8b95a5",
+                font: { size: 11 },
+                callback: function (value) {
+                  return value + "%";
+                },
+              },
+            },
+          },
+        },
+      });
+    })();
+  </script>
   {% else %}
   <section class="rounded-3xl border border-white/70 bg-white/90 px-5 py-12 text-center shadow-panel backdrop-blur sm:px-8">
     <p class="font-display text-xl font-semibold text-ink-950">No exam results yet</p>

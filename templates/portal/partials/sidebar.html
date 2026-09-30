@@ -54,6 +54,18 @@
     </a>
 
     <a
+      href="{% url 'portal:conduct' %}"
+      class="portal-nav-link {% if request.resolver_match.url_name == 'conduct' %}is-active{% endif %}"
+      :title="sidebarCollapsed ? 'Student conduct' : null"
+      @click="sidebarOpen = false"
+    >
+      <svg class="portal-nav-link__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">Student conduct</span>
+    </a>
+
+    <a
       href="{% url 'portal:results' %}"
       class="portal-nav-link {% if request.resolver_match.url_name == 'results' %}is-active{% endif %}"
       :title="sidebarCollapsed ? 'Results' : null"
@@ -101,14 +113,17 @@
       <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">E-Learning</span>
     </a>
 
-    <span class="portal-nav-link is-soon" aria-disabled="true"
-          :title="sidebarCollapsed ? 'Notices — coming soon' : 'Coming soon'">
+    <a
+      href="{% url 'portal:academic_calendar' %}"
+      class="portal-nav-link {% if request.resolver_match.url_name == 'academic_calendar' %}is-active{% endif %}"
+      :title="sidebarCollapsed ? 'Academic calendar' : null"
+      @click="sidebarOpen = false"
+    >
       <svg class="portal-nav-link__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
-      <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">Notices</span>
-      <span class="portal-nav-link__badge" :class="sidebarCollapsed && 'lg:hidden'">Soon</span>
-    </span>
+      <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">Academic calendar</span>
+    </a>
   </nav>
 
   <div class="shrink-0 border-t border-ink-950/8 p-3 space-y-3"

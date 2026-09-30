@@ -5,35 +5,6 @@
 
 {% block content %}
 <div class="anim-rise mx-auto max-w-6xl space-y-6">
-  <section class="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-panel backdrop-blur sm:p-7">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-ink-400">Class register</p>
-        <h2 class="mt-1 font-display text-2xl font-semibold text-ink-950 sm:text-3xl">{{ student.display_name }}</h2>
-        <p class="mt-1 text-sm text-ink-600">
-          {{ student.academic_level_label }}{% if student.class_group %} · {{ student.class_group }}{% endif %}
-          {% if academic_class %} · matched to {{ academic_class.name }} ({{ academic_class.code }}){% endif %}
-        </p>
-      </div>
-      <div class="grid grid-cols-3 gap-3 sm:min-w-[18rem]">
-        <div class="rounded-2xl bg-ink-950/[0.03] px-3 py-3 text-center">
-          <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Days</p>
-          <p class="mt-1 font-display text-xl font-semibold">{{ days_recorded }}</p>
-        </div>
-        <div class="rounded-2xl bg-ink-950/[0.03] px-3 py-3 text-center">
-          <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Present</p>
-          <p class="mt-1 font-display text-xl font-semibold">{{ present_slots }}/{{ total_slots }}</p>
-        </div>
-        <div class="rounded-2xl bg-brand-soft px-3 py-3 text-center">
-          <p class="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Rate</p>
-          <p class="mt-1 font-display text-xl font-semibold text-brand">
-            {% if attendance_rate is not None %}{{ attendance_rate }}%{% else %}—{% endif %}
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <section class="overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-panel backdrop-blur">
     {% if records %}
     <div class="overflow-x-auto">

@@ -15,6 +15,7 @@ class ParentGuardian(models.Model):
     relationship_to_student = models.CharField(max_length=80)
     phone_number = models.CharField(max_length=24, unique=True)
     email = models.EmailField(blank=True)
+    profile_image = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField()
 
     class Meta:
@@ -132,3 +133,9 @@ from .curriculum_models import (  # noqa: E402,F401
 )
 from .finance_models import FeeCategory, FeeCharge, Payment  # noqa: E402,F401
 from .elearning_models import ELearningEnrollment, ELearningSubject  # noqa: E402,F401
+from .activity_models import (  # noqa: E402,F401
+    SchoolActivity,
+    SchoolActivityDay,
+    SchoolActivityGrade,
+    StudentConductRecord,
+)

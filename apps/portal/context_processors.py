@@ -3,30 +3,23 @@ from pathlib import Path
 from django.conf import settings
 from django.core.cache import cache
 
+from . import profile as portal_profile
 from . import session as portal_session
 from .models import SchoolProfile, Student
+
+# Portal chrome uses a fixed professional blue (school DB may still store another accent).
+PORTAL_BRAND_COLOR = "#1f5cf0"
 
 DEFAULT_BRAND = {
     "school_name": "Educentric Portal",
     "school_display": "School Portal",
-    "primary_color": "#1f5cf0",
+    "primary_color": PORTAL_BRAND_COLOR,
     "motto": "",
     "logo": "",
     "logo_url": "",
     "brand_initials": "EC",
     "has_logo": False,
 }
-
-
-def _normalize_color(color, fallback="#1f5cf0"):
-    value = (color or "").strip()
-    if len(value) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in value):
-        value = f"#{value}"
-    if len(value) == 7 and value.startswith("#") and all(
-        ch in "0123456789abcdefABCDEF" for ch in value[1:]
-    ):
-        return value.lower()
-    return fallback
 
 
 def _brand_initials(name):
@@ -48,23 +41,21 @@ def _logo_url(logo_name):
 
 
 def portal_branding(request):
-    brand = cache.get("portal_school_branding_v2")
+    brand = cache.get("portal_school_branding_v3")
     if brand is None:
         profile = SchoolProfile.objects.only(
             "official_name",
             "display_name",
-            "primary_color",
             "motto",
             "school_logo",
         ).first()
         if profile:
             display = profile.display_name or profile.official_name or DEFAULT_BRAND["school_display"]
-            accent = _normalize_color(profile.primary_color, DEFAULT_BRAND["primary_color"])
             logo_url = _logo_url(profile.school_logo)
             brand = {
                 "school_name": profile.official_name or DEFAULT_BRAND["school_name"],
                 "school_display": display,
-                "primary_color": accent,
+                "primary_color": PORTAL_BRAND_COLOR,
                 "motto": profile.motto or "",
                 "logo": profile.school_logo or "",
                 "logo_url": logo_url,
@@ -73,7 +64,7 @@ def portal_branding(request):
             }
         else:
             brand = DEFAULT_BRAND.copy()
-        cache.set("portal_school_branding_v2", brand, 300)
+        cache.set("portal_school_branding_v3", brand, 300)
 
     siblings = []
     role = getattr(request, "portal_role", None)
@@ -86,10 +77,18 @@ def portal_branding(request):
             ).order_by("first_name", "last_name")
         )
 
+    student = getattr(request, "portal_student", None)
     return {
         "brand": brand,
         "portal_role": role,
-        "portal_student": getattr(request, "portal_student", None),
+        "portal_student": student,
         "portal_parent": parent,
         "portal_siblings": siblings,
+        "portal_can_edit_profile": role == portal_session.ROLE_PARENT and parent is not None,
+        "portal_avatar_url": portal_profile.account_avatar_url(
+            role=role, parent=parent, student=student
+        ),
+        "portal_avatar_initial": portal_profile.account_initial(
+            role=role, parent=parent, student=student
+        ),
     }
