@@ -404,20 +404,109 @@ def elearning(request):
     )
 
 
+def _elearning_subject_or_redirect(request, subject_id):
+    student, denied = _portal_student_or_redirect(request)
+    if denied:
+        return None, None, denied
+    data = elearning_service.student_elearning_subject(student, subject_id)
+    if data is None:
+        messages.error(request, "That subject is not available for this learner’s grade.")
+        return None, None, redirect("portal:elearning")
+    return student, data, None
+
+
 @portal_session.portal_login_required
 @require_GET
 def elearning_subject(request, subject_id):
-    student, denied = _portal_student_or_redirect(request)
+    student, data, denied = _elearning_subject_or_redirect(request, subject_id)
     if denied:
         return denied
-    data = elearning_service.student_elearning_subject(student, subject_id)
-    if data is None:
-        messages.error(request, "That subject is not available for this student.")
-        return redirect("portal:elearning")
     return render(
         request,
         "portal/elearning_subject.html",
         {"student": student, **data},
+    )
+
+
+@portal_session.portal_login_required
+@require_GET
+def elearning_subject_library(request, subject_id):
+    student, data, denied = _elearning_subject_or_redirect(request, subject_id)
+    if denied:
+        return denied
+    return render(
+        request,
+        "portal/elearning_subject_library.html",
+        {"student": student, **data},
+    )
+
+
+@portal_session.portal_login_required
+@require_GET
+def elearning_subject_assessment(request, subject_id):
+    student, data, denied = _elearning_subject_or_redirect(request, subject_id)
+    if denied:
+        return denied
+    return render(
+        request,
+        "portal/elearning_subject_assessment.html",
+        {"student": student, **data},
+    )
+
+
+@portal_session.portal_login_required
+@require_http_methods(["GET", "POST"])
+def elearning_subject_attendance(request, subject_id):
+    student, data, denied = _elearning_subject_or_redirect(request, subject_id)
+    if denied:
+        return denied
+
+    allocation = data.get("allocation")
+    level = data.get("academic_level")
+    lesson_date = elearning_service.parse_lesson_date(
+        request.POST.get("lesson_date") if request.method == "POST" else request.GET.get("date")
+    )
+    calendar_month = elearning_service.parse_calendar_month(
+        None if request.method == "POST" else request.GET.get("month"),
+        lesson_date,
+    )
+
+    if request.method == "POST":
+        if allocation is None or level is None:
+            messages.error(request, "Attendance cannot be saved until this subject is allocated.")
+            return redirect("portal:elearning_subject_attendance", subject_id=subject_id)
+        status_by_student = {}
+        for key, value in request.POST.items():
+            if not key.startswith("status_"):
+                continue
+            try:
+                learner_id = int(key.removeprefix("status_"))
+            except ValueError:
+                continue
+            status_by_student[learner_id] = value
+        elearning_service.save_subject_attendance(
+            allocation=allocation,
+            level=level,
+            lesson_date=lesson_date,
+            notes=(request.POST.get("attendance_notes") or "").strip(),
+            status_by_student=status_by_student,
+        )
+        messages.success(
+            request,
+            f"Attendance saved for {data['subject'].name} · {lesson_date.strftime('%d %b %Y')}.",
+        )
+        return redirect(
+            f"{request.path}?date={lesson_date.isoformat()}"
+            f"&month={lesson_date.strftime('%Y-%m')}"
+        )
+
+    roll = elearning_service.subject_attendance_roll(
+        allocation, level, lesson_date, calendar_month=calendar_month
+    )
+    return render(
+        request,
+        "portal/elearning_subject_attendance.html",
+        {"student": student, **data, **roll},
     )
 
 

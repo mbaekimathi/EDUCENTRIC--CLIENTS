@@ -18,6 +18,21 @@ urlpatterns = [
     path("finances/stk/<int:stk_id>/status/", views.finances_stk_status, name="finances_stk_status"),
     path("e-learning/", views.elearning, name="elearning"),
     path("e-learning/<int:subject_id>/", views.elearning_subject, name="elearning_subject"),
+    path(
+        "e-learning/<int:subject_id>/library/",
+        views.elearning_subject_library,
+        name="elearning_subject_library",
+    ),
+    path(
+        "e-learning/<int:subject_id>/assessment/",
+        views.elearning_subject_assessment,
+        name="elearning_subject_assessment",
+    ),
+    path(
+        "e-learning/<int:subject_id>/attendance/",
+        views.elearning_subject_attendance,
+        name="elearning_subject_attendance",
+    ),
     path("profile/", views.profile_settings, name="profile_settings"),
     path("api/students/search/", views.student_search, name="student_search"),
     path("switch-student/", views.switch_student, name="switch_student"),

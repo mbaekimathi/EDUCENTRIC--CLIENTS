@@ -23,6 +23,7 @@
     </div>
   </div>
 
+  {% with url_name=request.resolver_match.url_name subject_id=request.resolver_match.kwargs.subject_id %}
   <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-4" aria-label="Primary">
     <p class="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-400"
        :class="sidebarCollapsed && 'lg:hidden'">
@@ -31,7 +32,7 @@
 
     <a
       href="{% url 'portal:dashboard' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'dashboard' %}is-active{% endif %}"
+      class="portal-nav-link {% if url_name == 'dashboard' %}is-active{% endif %}"
       :title="sidebarCollapsed ? 'Dashboard' : null"
       @click="sidebarOpen = false"
     >
@@ -41,9 +42,10 @@
       <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">Dashboard</span>
     </a>
 
+    {% if url_name == 'dashboard' %}
     <a
       href="{% url 'portal:finances' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'finances' %}is-active{% endif %}"
+      class="portal-nav-link"
       :title="sidebarCollapsed ? 'Finances' : null"
       @click="sidebarOpen = false"
     >
@@ -55,7 +57,7 @@
 
     <a
       href="{% url 'portal:attendance' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'attendance' %}is-active{% endif %}"
+      class="portal-nav-link"
       :title="sidebarCollapsed ? 'Attendance' : null"
       @click="sidebarOpen = false"
     >
@@ -67,7 +69,7 @@
 
     <a
       href="{% url 'portal:conduct' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'conduct' %}is-active{% endif %}"
+      class="portal-nav-link"
       :title="sidebarCollapsed ? 'Student conduct' : null"
       @click="sidebarOpen = false"
     >
@@ -79,7 +81,7 @@
 
     <a
       href="{% url 'portal:results' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'results' %}is-active{% endif %}"
+      class="portal-nav-link"
       :title="sidebarCollapsed ? 'Results' : null"
       @click="sidebarOpen = false"
     >
@@ -91,7 +93,7 @@
 
     <a
       href="{% url 'portal:timetable' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'timetable' %}is-active{% endif %}"
+      class="portal-nav-link"
       :title="sidebarCollapsed ? 'Timetable' : null"
       @click="sidebarOpen = false"
     >
@@ -103,7 +105,7 @@
 
     <a
       href="{% url 'portal:elearning' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'elearning' or request.resolver_match.url_name == 'elearning_subject' %}is-active{% endif %}"
+      class="portal-nav-link"
       :title="sidebarCollapsed ? 'E-Learning' : null"
       @click="sidebarOpen = false"
     >
@@ -115,7 +117,7 @@
 
     <a
       href="{% url 'portal:academic_calendar' %}"
-      class="portal-nav-link {% if request.resolver_match.url_name == 'academic_calendar' %}is-active{% endif %}"
+      class="portal-nav-link"
       :title="sidebarCollapsed ? 'Academic calendar' : null"
       @click="sidebarOpen = false"
     >
@@ -124,7 +126,59 @@
       </svg>
       <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">Academic calendar</span>
     </a>
+    {% elif subject_id %}
+      {% if url_name == 'elearning_subject' or url_name == 'elearning_subject_library' or url_name == 'elearning_subject_assessment' or url_name == 'elearning_subject_attendance' %}
+    <a
+      href="{% url 'portal:elearning_subject' subject_id %}"
+      class="portal-nav-link {% if url_name == 'elearning_subject' %}is-active{% endif %}"
+      :title="sidebarCollapsed ? '{% if subject %}{{ subject.name|escapejs }}{% else %}Subject{% endif %}' : null"
+      @click="sidebarOpen = false"
+    >
+      <svg class="portal-nav-link__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+      </svg>
+      <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">{% if subject %}{{ subject.name }}{% else %}Subject{% endif %}</span>
+    </a>
+
+    <a
+      href="{% url 'portal:elearning_subject_library' subject_id %}"
+      class="portal-nav-link {% if url_name == 'elearning_subject_library' %}is-active{% endif %}"
+      :title="sidebarCollapsed ? 'Library' : null"
+      @click="sidebarOpen = false"
+    >
+      <svg class="portal-nav-link__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+      </svg>
+      <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">Library</span>
+    </a>
+
+    <a
+      href="{% url 'portal:elearning_subject_assessment' subject_id %}"
+      class="portal-nav-link {% if url_name == 'elearning_subject_assessment' %}is-active{% endif %}"
+      :title="sidebarCollapsed ? 'E-Assessment' : null"
+      @click="sidebarOpen = false"
+    >
+      <svg class="portal-nav-link__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      </svg>
+      <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">E-Assessment</span>
+    </a>
+
+    <a
+      href="{% url 'portal:elearning_subject_attendance' subject_id %}"
+      class="portal-nav-link {% if url_name == 'elearning_subject_attendance' %}is-active{% endif %}"
+      :title="sidebarCollapsed ? 'E-Subject Attendance' : null"
+      @click="sidebarOpen = false"
+    >
+      <svg class="portal-nav-link__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">E-Subject Attendance</span>
+    </a>
+      {% endif %}
+    {% endif %}
   </nav>
+  {% endwith %}
 
   <div class="shrink-0 border-t border-ink-950/8 p-3 space-y-3"
        :class="sidebarCollapsed && 'lg:px-2'">
@@ -179,5 +233,19 @@
       </ul>
     </div>
     {% endif %}
+
+    <form method="post" action="{% url 'portal:logout' %}">
+      {% csrf_token %}
+      <button
+        type="submit"
+        class="portal-nav-link w-full text-left text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+        :title="sidebarCollapsed ? 'Sign out' : null"
+      >
+        <svg class="portal-nav-link__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        <span class="portal-nav-link__label" :class="sidebarCollapsed && 'lg:hidden'">Sign out</span>
+      </button>
+    </form>
   </div>
 </aside>

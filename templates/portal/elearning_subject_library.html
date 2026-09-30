@@ -1,0 +1,76 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}Library · {{ subject.name }} · {{ brand.school_display }}{% endblock %}
+{% block header_title %}Library{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-6xl space-y-5">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <a
+          class="inline-flex items-center gap-1.5 text-sm font-medium text-white/80 transition hover:text-white"
+          href="{% url 'portal:elearning_subject' subject.pk %}"
+        >
+          <span aria-hidden="true">←</span> {{ subject.name }}
+        </a>
+        <p class="page-hero__eyebrow mt-3">Subject library</p>
+        <h2 class="page-hero__title">Library</h2>
+        <p class="page-hero__lede">
+          Learning materials for {{ subject.name }} · {{ student.display_name }}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="portal-surface">
+    {% if materials %}
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Learning materials</h3>
+        <p class="portal-surface__lede">Published resources for {{ subject.name }}.</p>
+      </div>
+    </header>
+    <ul class="divide-y divide-ink-950/8" role="list">
+      {% for material in materials %}
+      <li>
+        <a
+          class="flex items-center gap-3 px-5 py-4 transition hover:bg-brand-soft/35 sm:px-7"
+          href="{{ material.material_file.url }}"
+          {% if material.content_format == 'LECTURE_VIDEO' or material.content_format == 'AUDIO' %}target="_blank" rel="noopener"{% else %}download{% endif %}
+        >
+          <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand" aria-hidden="true">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block font-semibold text-ink-950">{{ material.name }}</span>
+            <span class="mt-0.5 block text-xs text-ink-400">
+              {{ material.get_content_format_display }}
+              {% if material.category %} · {{ material.category }}{% endif %}
+              {% if material.file_size %} · {{ material.human_file_size }}{% endif %}
+            </span>
+          </span>
+          <span class="shrink-0 text-brand" aria-hidden="true">↓</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">No materials yet</p>
+      <p class="portal-empty__text">
+        Published library resources for {{ subject.name }} will appear here once teachers share them.
+      </p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

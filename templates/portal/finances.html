@@ -18,206 +18,331 @@
     </div>
   </section>
 
-  <section class="portal-surface p-5 sm:p-6">
-    <div class="metric-strip">
-      <div class="metric-tile">
-        <span class="metric-tile__label">Charged</span>
-        <span class="metric-tile__value" id="finance-charged">KES {{ total_charged|floatformat:2 }}</span>
+  <section class="pay-panel{% if is_parent %} pay-panel--action{% endif %}" id="pay-fees-panel">
+    <div class="pay-panel__glow" aria-hidden="true"></div>
+    <header class="pay-panel__head">
+      <div class="pay-panel__brand">
+        <span class="pay-panel__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M7.5 8.5c1.2-1.4 2.7-2 4.5-2s3.5.7 4.5 2M7.5 15.5c1.2 1.4 2.7 2 4.5 2s3.5-.7 4.5-2" />
+            <rect x="3" y="5" width="18" height="14" rx="3" />
+          </svg>
+        </span>
+        <div class="min-w-0">
+          <p class="pay-panel__eyebrow">M-Pesa · School fees</p>
+          <h3 class="pay-panel__title">{% if is_parent %}Pay fees{% else %}Fee account{% endif %}</h3>
+          <p class="pay-panel__lede">
+            {% if is_parent %}
+              Review the balance, enter an amount, and send an STK prompt to your phone.
+            {% else %}
+              Charges, receipts, and outstanding balance for {{ student.display_name }}.
+            {% endif %}
+          </p>
+        </div>
       </div>
-      <div class="metric-tile is-good">
-        <span class="metric-tile__label">Paid</span>
-        <span class="metric-tile__value" id="finance-paid">KES {{ total_paid|floatformat:2 }}</span>
-      </div>
-      <div class="metric-tile {% if balance <= 0 %}is-good{% else %}is-warn is-accent{% endif %}" id="finance-balance-tile">
-        <span class="metric-tile__label">Balance</span>
-        <span class="metric-tile__value" id="finance-balance">KES {{ balance|floatformat:2 }}</span>
-      </div>
-    </div>
-  </section>
-
-  {% if is_parent %}
-  <section class="portal-surface" id="pay-fees-panel">
-    <header class="portal-surface__head">
-      <div>
-        <h3 class="portal-surface__title">Pay fees</h3>
-        <p class="portal-surface__lede">
-          Enter an amount and send an M-Pesa STK prompt to a phone number you choose.
-        </p>
+      <div class="pay-panel__due {% if balance <= 0 %}is-clear{% else %}is-due{% endif %}" id="finance-balance-tile">
+        <span class="pay-panel__due-label">{% if balance <= 0 %}All clear{% else %}Amount due{% endif %}</span>
+        <span class="pay-panel__due-value" id="finance-balance">KES {{ balance|floatformat:2 }}</span>
       </div>
     </header>
 
-    <div class="px-5 pb-5 sm:px-6 sm:pb-6">
-      {% if can_pay_fees %}
-      <form id="parent-stk-form" class="pay-fees-form" novalidate>
-        {% csrf_token %}
-        <div class="pay-fees-form__row">
-          <label class="pay-fees-field">
-            <span class="pay-fees-field__label">Amount (KES)</span>
-            <input
-              type="number"
-              name="amount"
-              id="pay-amount"
-              class="pay-fees-field__input"
-              min="1"
-              step="1"
-              inputmode="numeric"
-              required
-              placeholder="{% if balance > 0 %}{{ balance|floatformat:0 }}{% else %}e.g. 1000{% endif %}"
-              value="{% if balance > 0 %}{{ balance|floatformat:0 }}{% endif %}"
-              autocomplete="off"
-            >
-            <span class="pay-fees-field__hint">Whole shillings only</span>
-          </label>
+    <div class="pay-panel__body">
+      <div class="pay-panel__metrics" aria-label="Fee summary">
+        <div class="pay-panel__metric">
+          <span class="pay-panel__metric-label">Charged</span>
+          <span class="pay-panel__metric-value" id="finance-charged">KES {{ total_charged|floatformat:2 }}</span>
+        </div>
+        <div class="pay-panel__metric is-paid">
+          <span class="pay-panel__metric-label">Paid</span>
+          <span class="pay-panel__metric-value" id="finance-paid">KES {{ total_paid|floatformat:2 }}</span>
+        </div>
+        <div class="pay-panel__metric {% if balance <= 0 %}is-paid{% else %}is-due{% endif %}" id="finance-balance-metric">
+          <span class="pay-panel__metric-label">Balance</span>
+          <span class="pay-panel__metric-value" id="finance-balance-metric-value">KES {{ balance|floatformat:2 }}</span>
+        </div>
+      </div>
 
-          <label class="pay-fees-field">
-            <span class="pay-fees-field__label">M-Pesa phone</span>
-            <input
-              type="tel"
-              name="phone"
-              id="pay-phone"
-              class="pay-fees-field__input"
-              inputmode="tel"
-              autocomplete="tel"
-              required
-              placeholder="07XX XXX XXX"
-              value="{% if pay_phone_raw %}{{ pay_phone_display }}{% endif %}"
-            >
-            <span class="pay-fees-field__hint">
-              STK prompt goes to this number
-            </span>
-          </label>
+      {% if is_parent %}
+      <div class="pay-panel__pay">
+        <div class="pay-panel__pay-head">
+          <h4 class="pay-panel__pay-title">Pay with M-Pesa</h4>
+          <p class="pay-panel__pay-copy">STK Push — confirm with your PIN on the phone</p>
         </div>
 
-        <div class="pay-fees-actions">
-          <button type="submit" class="pay-fees-submit" id="pay-submit">
-            Send STK prompt
-          </button>
-        </div>
+        {% if can_pay_fees %}
+        <form id="parent-stk-form" class="pay-fees-form" novalidate>
+          {% csrf_token %}
+          <div class="pay-fees-form__row">
+            <label class="pay-fees-field">
+              <span class="pay-fees-field__label">Amount (KES)</span>
+              <input
+                type="number"
+                name="amount"
+                id="pay-amount"
+                class="pay-fees-field__input"
+                min="1"
+                step="1"
+                inputmode="numeric"
+                required
+                placeholder="{% if balance > 0 %}{{ balance|floatformat:0 }}{% else %}e.g. 1000{% endif %}"
+                value="{% if balance > 0 %}{{ balance|floatformat:0 }}{% endif %}"
+                autocomplete="off"
+              >
+              <span class="pay-fees-field__hint">Whole shillings only</span>
+            </label>
 
-        <div id="pay-stk-status" class="pay-stk-status" hidden role="status" aria-live="polite">
-          <p class="pay-stk-status__title" id="pay-stk-status-title">Waiting for M-Pesa…</p>
-          <p class="pay-stk-status__copy" id="pay-stk-status-copy">
-            Enter your M-Pesa PIN on the phone. This page updates when Safaricom confirms.
+            <label class="pay-fees-field">
+              <span class="pay-fees-field__label">M-Pesa phone</span>
+              <input
+                type="tel"
+                name="phone"
+                id="pay-phone"
+                class="pay-fees-field__input"
+                inputmode="tel"
+                autocomplete="tel"
+                required
+                placeholder="07XX XXX XXX"
+                value="{% if pay_phone_raw %}{{ pay_phone_display }}{% endif %}"
+              >
+              <span class="pay-fees-field__hint">STK prompt goes to this number</span>
+            </label>
+          </div>
+
+          <div class="pay-fees-actions">
+            <button type="submit" class="pay-fees-submit" id="pay-submit">
+              <svg class="pay-fees-submit__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Send STK prompt
+            </button>
+          </div>
+
+          <p id="pay-stk-inline-error" class="pay-stk-inline-error" hidden role="alert"></p>
+        </form>
+
+        <div
+          id="pay-stk-modal"
+          class="pay-stk-modal"
+          hidden
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pay-stk-modal-title"
+        >
+          <div class="pay-stk-modal__backdrop" data-stk-dismiss></div>
+          <div class="pay-stk-modal__card">
+            <div class="pay-stk-modal__scene" id="pay-stk-modal-scene" aria-hidden="true">
+              <span class="pay-stk-coin pay-stk-coin--1">
+                <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                  <circle cx="24" cy="24" r="22" fill="#f59e0b"/>
+                  <circle cx="24" cy="24" r="18" fill="#fbbf24" stroke="#d97706" stroke-width="1.5"/>
+                  <text x="24" y="29" text-anchor="middle" font-size="14" font-weight="800" fill="#92400e">K</text>
+                </svg>
+              </span>
+              <span class="pay-stk-coin pay-stk-coin--2">
+                <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                  <circle cx="24" cy="24" r="22" fill="#22c55e"/>
+                  <circle cx="24" cy="24" r="18" fill="#4ade80" stroke="#16a34a" stroke-width="1.5"/>
+                  <text x="24" y="29" text-anchor="middle" font-size="13" font-weight="800" fill="#14532d">KES</text>
+                </svg>
+              </span>
+              <span class="pay-stk-coin pay-stk-coin--3">
+                <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                  <circle cx="24" cy="24" r="22" fill="#f59e0b"/>
+                  <circle cx="24" cy="24" r="18" fill="#fde68a" stroke="#d97706" stroke-width="1.5"/>
+                  <text x="24" y="29" text-anchor="middle" font-size="14" font-weight="800" fill="#92400e">K</text>
+                </svg>
+              </span>
+              <span class="pay-stk-note pay-stk-note--1">
+                <svg viewBox="0 0 64 36" fill="none" aria-hidden="true">
+                  <rect width="64" height="36" rx="4" fill="#15803d"/>
+                  <rect x="3" y="3" width="58" height="30" rx="2" fill="#22c55e"/>
+                  <circle cx="32" cy="18" r="8" fill="#bbf7d0" opacity="0.7"/>
+                  <text x="32" y="22" text-anchor="middle" font-size="9" font-weight="800" fill="#14532d">1000</text>
+                </svg>
+              </span>
+              <span class="pay-stk-note pay-stk-note--2">
+                <svg viewBox="0 0 64 36" fill="none" aria-hidden="true">
+                  <rect width="64" height="36" rx="4" fill="#1d4ed8"/>
+                  <rect x="3" y="3" width="58" height="30" rx="2" fill="#3b82f6"/>
+                  <circle cx="32" cy="18" r="8" fill="#bfdbfe" opacity="0.7"/>
+                  <text x="32" y="22" text-anchor="middle" font-size="9" font-weight="800" fill="#1e3a8a">500</text>
+                </svg>
+              </span>
+              <div class="pay-stk-modal__pulse"></div>
+            </div>
+
+            <div class="pay-stk-modal__result-icon" id="pay-stk-modal-icon" hidden aria-hidden="true">
+              <svg class="pay-stk-modal__icon-ok" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="22" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+                <path d="M14 24.5l7 7 13-14" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg class="pay-stk-modal__icon-err" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="22" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+                <path d="M17 17l14 14M31 17L17 31" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
+              </svg>
+            </div>
+
+            <h3 class="pay-stk-modal__title" id="pay-stk-modal-title">Waiting for M-Pesa…</h3>
+            <p class="pay-stk-modal__copy" id="pay-stk-modal-copy">
+              Enter your M-Pesa PIN on the phone.
+            </p>
+            <p class="pay-stk-modal__reason" id="pay-stk-modal-reason" hidden></p>
+            <p class="pay-stk-modal__ref" id="pay-stk-modal-ref"></p>
+            <button type="button" class="pay-stk-modal__close" id="pay-stk-modal-close" hidden>
+              Done
+            </button>
+          </div>
+        </div>
+        {% else %}
+        <div class="portal-empty portal-empty--compact">
+          <p class="portal-empty__title">Payment prompt unavailable</p>
+          <p class="portal-empty__text">
+            {{ stk_unavailable_reason|default:"M-Pesa STK Push is not available right now." }}
           </p>
-          <p class="pay-stk-status__ref" id="pay-stk-status-ref"></p>
         </div>
-      </form>
-      {% else %}
-      <div class="portal-empty portal-empty--compact">
-        <p class="portal-empty__title">Payment prompt unavailable</p>
-        <p class="portal-empty__text">
-          {{ stk_unavailable_reason|default:"M-Pesa STK Push is not available right now." }}
-        </p>
+        {% endif %}
       </div>
       {% endif %}
     </div>
   </section>
-  {% endif %}
 
-  <section class="portal-surface">
-    <header class="portal-surface__head">
-      <div>
-        <h3 class="portal-surface__title">Charges</h3>
-        <p class="portal-surface__lede">Fee items posted to this learner</p>
-      </div>
-    </header>
-    {% if charges %}
-    <div class="overflow-x-auto">
-      <table class="portal-table w-full min-w-[44rem] text-left text-sm">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Period</th>
-            <th>Amount</th>
-            <th>Paid</th>
-            <th>Balance</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for charge in charges %}
-          <tr>
-            <td>
-              <span class="font-semibold text-ink-950">{{ charge.title }}</span>
-              <span class="mt-0.5 block text-xs text-ink-400">{{ charge.category.name }}</span>
-            </td>
-            <td class="text-ink-600">
-              {% if charge.academic_year or charge.term %}
-                {{ charge.academic_year }}{% if charge.academic_year and charge.term %} · {% endif %}{{ charge.term }}
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td class="font-semibold">{{ charge.amount|floatformat:2 }}</td>
-            <td>{{ charge.amount_paid|floatformat:2 }}</td>
-            <td class="font-semibold">{{ charge.balance|floatformat:2 }}</td>
-            <td><span class="att-pill is-grade">{{ charge.get_status_display }}</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="portal-empty">
-      <span class="portal-empty__icon" aria-hidden="true">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2m0-8V6m0 12v-2m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
+  <details class="finance-reveal portal-surface">
+    <summary class="finance-reveal__summary">
+      <span class="finance-reveal__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h10M4 17h14" />
         </svg>
       </span>
-      <p class="portal-empty__title">No fee charges yet</p>
-      <p class="portal-empty__text">
-        When the accounts office posts fees for {{ student.display_name }}, they will appear here.
-      </p>
-    </div>
-    {% endif %}
-  </section>
-
-  <section class="portal-surface">
-    <header class="portal-surface__head">
-      <div>
-        <h3 class="portal-surface__title">Payments</h3>
-        <p class="portal-surface__lede">Receipts recorded against this account</p>
+      <span class="finance-reveal__copy">
+        <span class="finance-reveal__title">Vote and charges</span>
+        <span class="finance-reveal__lede">Fee items posted to this learner</span>
+      </span>
+      <span class="finance-reveal__meta">
+        <span class="finance-reveal__count">{{ charges|length }} item{{ charges|length|pluralize }}</span>
+        <span class="finance-reveal__action" data-closed="View" data-open="Hide"></span>
+        <span class="finance-reveal__chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </span>
+    </summary>
+    <div class="finance-reveal__body">
+      {% if charges %}
+      <div class="overflow-x-auto">
+        <table class="portal-table w-full min-w-[44rem] text-left text-sm">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Period</th>
+              <th>Amount</th>
+              <th>Paid</th>
+              <th>Balance</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for charge in charges %}
+            <tr>
+              <td>
+                <span class="font-semibold text-ink-950">{{ charge.title }}</span>
+                <span class="mt-0.5 block text-xs text-ink-400">{{ charge.category.name }}</span>
+              </td>
+              <td class="text-ink-600">
+                {% if charge.academic_year or charge.term %}
+                  {{ charge.academic_year }}{% if charge.academic_year and charge.term %} · {% endif %}{{ charge.term }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="font-semibold">{{ charge.amount|floatformat:2 }}</td>
+              <td>{{ charge.amount_paid|floatformat:2 }}</td>
+              <td class="font-semibold">{{ charge.balance|floatformat:2 }}</td>
+              <td><span class="att-pill is-grade">{{ charge.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
-    </header>
-    {% if payments %}
-    <div class="overflow-x-auto">
-      <table class="portal-table w-full min-w-[36rem] text-left text-sm">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Amount</th>
-            <th>Method</th>
-            <th>Reference</th>
-            <th>Against</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for payment in payments %}
-          <tr>
-            <td class="font-semibold">{{ payment.received_at|date:"j M Y, H:i" }}</td>
-            <td class="font-semibold">KES {{ payment.amount|floatformat:2 }}</td>
-            <td>{{ payment.get_method_display }}</td>
-            <td>{{ payment.reference|default:"—" }}</td>
-            <td>{% if payment.charge %}{{ payment.charge.title }}{% else %}—{% endif %}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      {% else %}
+      <div class="portal-empty">
+        <span class="portal-empty__icon" aria-hidden="true">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2m0-8V6m0 12v-2m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </span>
+        <p class="portal-empty__title">No fee charges yet</p>
+        <p class="portal-empty__text">
+          When the accounts office posts fees for {{ student.display_name }}, they will appear here.
+        </p>
+      </div>
+      {% endif %}
     </div>
-    {% else %}
-    <div class="portal-empty">
-      <span class="portal-empty__icon" aria-hidden="true">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </details>
+
+  <details class="finance-reveal portal-surface">
+    <summary class="finance-reveal__summary">
+      <span class="finance-reveal__mark finance-reveal__mark--statement" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8M8 11h8M8 15h5" />
+          <rect x="4" y="3" width="16" height="18" rx="2.5" />
         </svg>
       </span>
-      <p class="portal-empty__title">No payments recorded</p>
-      <p class="portal-empty__text">
-        Receipts for this learner will list here after payment is recorded in accounts.
-      </p>
+      <span class="finance-reveal__copy">
+        <span class="finance-reveal__title">Fee statement</span>
+        <span class="finance-reveal__lede">Receipts recorded against this account</span>
+      </span>
+      <span class="finance-reveal__meta">
+        <span class="finance-reveal__count">{{ payments|length }} receipt{{ payments|length|pluralize }}</span>
+        <span class="finance-reveal__action" data-closed="View" data-open="Hide"></span>
+        <span class="finance-reveal__chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </span>
+    </summary>
+    <div class="finance-reveal__body">
+      {% if payments %}
+      <div class="overflow-x-auto">
+        <table class="portal-table w-full min-w-[36rem] text-left text-sm">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Amount</th>
+              <th>Method</th>
+              <th>Reference</th>
+              <th>Against</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for payment in payments %}
+            <tr>
+              <td class="font-semibold">{{ payment.received_at|date:"j M Y, H:i" }}</td>
+              <td class="font-semibold">KES {{ payment.amount|floatformat:2 }}</td>
+              <td>{{ payment.get_method_display }}</td>
+              <td>{{ payment.reference|default:"—" }}</td>
+              <td>{% if payment.charge %}{{ payment.charge.title }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="portal-empty">
+        <span class="portal-empty__icon" aria-hidden="true">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </span>
+        <p class="portal-empty__title">No payments recorded</p>
+        <p class="portal-empty__text">
+          Receipts for this learner will list here after payment is recorded in accounts.
+        </p>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
-  </section>
+  </details>
 </div>
 
 {% if is_parent and can_pay_fees %}
@@ -229,26 +354,61 @@
   var amountInput = document.getElementById("pay-amount");
   var phoneInput = document.getElementById("pay-phone");
   var submitBtn = document.getElementById("pay-submit");
-  var statusBox = document.getElementById("pay-stk-status");
-  var statusTitle = document.getElementById("pay-stk-status-title");
-  var statusCopy = document.getElementById("pay-stk-status-copy");
-  var statusRef = document.getElementById("pay-stk-status-ref");
+  var inlineError = document.getElementById("pay-stk-inline-error");
+  var modal = document.getElementById("pay-stk-modal");
+  var modalScene = document.getElementById("pay-stk-modal-scene");
+  var modalIcon = document.getElementById("pay-stk-modal-icon");
+  var modalTitle = document.getElementById("pay-stk-modal-title");
+  var modalCopy = document.getElementById("pay-stk-modal-copy");
+  var modalReason = document.getElementById("pay-stk-modal-reason");
+  var modalRef = document.getElementById("pay-stk-modal-ref");
+  var modalClose = document.getElementById("pay-stk-modal-close");
   var initiateUrl = "{% url 'portal:finances_stk_initiate' %}";
   var statusUrlTpl = "{% url 'portal:finances_stk_status' stk_id=0 %}";
   var pollTimer = null;
   var busy = false;
+  var canDismiss = false;
 
   function statusUrl(stkId) {
     return statusUrlTpl.replace("/stk/0/", "/stk/" + stkId + "/");
   }
 
-  function setStatus(visible, title, copy, refText, tone) {
-    statusBox.hidden = !visible;
-    statusBox.classList.remove("is-ok", "is-err", "is-wait");
-    if (tone) statusBox.classList.add(tone);
-    statusTitle.textContent = title || "";
-    statusCopy.textContent = copy || "";
-    statusRef.textContent = refText || "";
+  function showInlineError(message) {
+    inlineError.hidden = !message;
+    inlineError.textContent = message || "";
+  }
+
+  function openModal(title, copy, refText, tone, reason) {
+    modal.hidden = false;
+    document.body.classList.add("pay-stk-modal-open");
+    modal.classList.remove("is-ok", "is-err", "is-wait");
+    if (tone) modal.classList.add(tone);
+
+    var waiting = tone === "is-wait";
+    canDismiss = !waiting;
+
+    modalScene.hidden = !waiting;
+    modalIcon.hidden = waiting;
+    modalClose.hidden = waiting;
+
+    modalTitle.textContent = title || "";
+    modalCopy.textContent = copy || "";
+    modalRef.textContent = refText || "";
+
+    if (reason) {
+      modalReason.hidden = false;
+      modalReason.textContent = reason;
+    } else {
+      modalReason.hidden = true;
+      modalReason.textContent = "";
+    }
+  }
+
+  function closeModal() {
+    if (!canDismiss) return;
+    modal.hidden = true;
+    document.body.classList.remove("pay-stk-modal-open");
+    canDismiss = false;
   }
 
   function setBusy(on) {
@@ -256,7 +416,7 @@
     amountInput.disabled = on;
     phoneInput.disabled = on;
     submitBtn.disabled = on;
-    submitBtn.textContent = on ? "Sending…" : "Send STK prompt";
+    submitBtn.textContent = on ? "Waiting…" : "Send STK prompt";
   }
 
   function updateTotals(stk) {
@@ -268,12 +428,25 @@
       document.getElementById("finance-paid").textContent = "KES " + stk.total_paid;
     }
     if (stk.balance != null) {
-      document.getElementById("finance-balance").textContent = "KES " + stk.balance;
-      var tile = document.getElementById("finance-balance-tile");
+      var balText = "KES " + stk.balance;
+      document.getElementById("finance-balance").textContent = balText;
+      var metricVal = document.getElementById("finance-balance-metric-value");
+      if (metricVal) metricVal.textContent = balText;
+
       var bal = parseFloat(stk.balance);
-      tile.classList.toggle("is-good", bal <= 0);
-      tile.classList.toggle("is-warn", bal > 0);
-      tile.classList.toggle("is-accent", bal > 0);
+      var clear = bal <= 0;
+      var tile = document.getElementById("finance-balance-tile");
+      if (tile) {
+        tile.classList.toggle("is-clear", clear);
+        tile.classList.toggle("is-due", !clear);
+        var dueLabel = tile.querySelector(".pay-panel__due-label");
+        if (dueLabel) dueLabel.textContent = clear ? "All clear" : "Amount due";
+      }
+      var metric = document.getElementById("finance-balance-metric");
+      if (metric) {
+        metric.classList.toggle("is-paid", clear);
+        metric.classList.toggle("is-due", !clear);
+      }
     }
   }
 
@@ -300,20 +473,26 @@
         var data = result.data || {};
         var stk = data.stk || {};
         if (!result.ok || !data.ok) {
-          setStatus(true, "Could not check status", (data.error || "Try again shortly."), "", "is-err");
           setBusy(false);
+          openModal(
+            "Could not check status",
+            "We could not confirm the payment yet.",
+            "",
+            "is-err",
+            data.error || "Try again shortly."
+          );
           return;
         }
         if (data.success) {
           clearPoll();
           setBusy(false);
           updateTotals(stk);
-          setStatus(
-            true,
-            "Payment received",
-            "KES " + stk.amount + " paid. Receipt " + (stk.mpesa_receipt || "recorded") + ".",
+          openModal(
+            "Payment successful",
+            "KES " + stk.amount + " has been received.",
             stk.checkout_request_id || "",
-            "is-ok"
+            "is-ok",
+            "Receipt " + (stk.mpesa_receipt || "recorded") + "."
           );
           submitBtn.textContent = "Pay again";
           return;
@@ -321,29 +500,43 @@
         if (data.failed || data.done) {
           clearPoll();
           setBusy(false);
-          setStatus(
-            true,
-            stk.cancelled ? "Payment cancelled" : "Payment not completed",
-            stk.failure_message || stk.result_desc || "No payment was received.",
+          openModal(
+            stk.cancelled ? "Payment cancelled" : "Payment failed",
+            "No payment was completed for this request.",
             stk.checkout_request_id || "",
-            "is-err"
+            "is-err",
+            stk.failure_message || stk.result_desc || "The request ended without a successful payment."
           );
           return;
         }
-        setStatus(
-          true,
+        openModal(
           "Waiting for M-Pesa…",
-          stk.result_desc || "Enter your M-Pesa PIN on the phone.",
+          stk.result_desc || "Enter your M-Pesa PIN on the phone. This stays open until Safaricom confirms.",
           stk.checkout_request_id || "",
-          "is-wait"
+          "is-wait",
+          ""
         );
         schedulePoll(stkId, 2800);
       })
       .catch(function () {
-        setStatus(true, "Network error", "Could not reach the server. Retrying…", "", "is-wait");
+        openModal(
+          "Waiting for M-Pesa…",
+          "Connection blip — retrying status check…",
+          "",
+          "is-wait",
+          ""
+        );
         schedulePoll(stkId, 4000);
       });
   }
+
+  modalClose.addEventListener("click", closeModal);
+  modal.querySelectorAll("[data-stk-dismiss]").forEach(function (el) {
+    el.addEventListener("click", closeModal);
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") closeModal();
+  });
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
@@ -351,31 +544,32 @@
 
     var amount = (amountInput.value || "").trim();
     if (!amount || Number(amount) < 1) {
-      setStatus(true, "Enter an amount", "Type how much you want to pay in Kenyan shillings.", "", "is-err");
+      showInlineError("Enter an amount of at least KES 1.");
       amountInput.focus();
       return;
     }
 
     var phone = (phoneInput.value || "").trim();
     if (!phone) {
-      setStatus(true, "Enter a phone number", "Type the M-Pesa number that should receive the prompt.", "", "is-err");
+      showInlineError("Enter the M-Pesa number that should receive the prompt.");
       phoneInput.focus();
       return;
     }
 
-    // Build FormData before disabling inputs — disabled fields are omitted.
+    showInlineError("");
+
     var body = new FormData(form);
     body.set("amount", amount);
     body.set("phone", phone);
 
     clearPoll();
     setBusy(true);
-    setStatus(
-      true,
+    openModal(
       "Sending STK prompt…",
       "Check your phone for the M-Pesa PIN request.",
       "",
-      "is-wait"
+      "is-wait",
+      ""
     );
 
     fetch(initiateUrl, {
@@ -389,24 +583,44 @@
         var data = result.data || {};
         if (!result.ok || !data.ok) {
           setBusy(false);
-          setStatus(true, "Could not send prompt", data.error || "Try again.", "", "is-err");
+          openModal(
+            "Could not send prompt",
+            "The M-Pesa request was not started.",
+            "",
+            "is-err",
+            data.error || "Try again."
+          );
           return;
         }
         var stk = data.stk || {};
-        setStatus(
-          true,
-          "STK prompt sent",
-          data.message || "Enter your M-Pesa PIN on the phone.",
+        openModal(
+          "Waiting for M-Pesa…",
+          data.message || "Enter your M-Pesa PIN on the phone. This stays open until Safaricom confirms.",
           stk.checkout_request_id || "",
-          "is-wait"
+          "is-wait",
+          ""
         );
-        submitBtn.textContent = "Waiting…";
         if (stk.id) schedulePoll(stk.id, 2200);
-        else setBusy(false);
+        else {
+          setBusy(false);
+          openModal(
+            "Could not track payment",
+            "The prompt may have been sent, but no tracking id was returned.",
+            "",
+            "is-err",
+            "Refresh Finances and check payments shortly."
+          );
+        }
       })
       .catch(function () {
         setBusy(false);
-        setStatus(true, "Network error", "Could not send the STK prompt. Check your connection.", "", "is-err");
+        openModal(
+          "Network error",
+          "Could not send the STK prompt.",
+          "",
+          "is-err",
+          "Check your connection and try again."
+        );
       });
   });
 })();

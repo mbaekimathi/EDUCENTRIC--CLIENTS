@@ -339,3 +339,182 @@ class GeneratedLearningLesson(models.Model):
         managed = False
         db_table = "curriculum_generatedlearninglesson"
         ordering = ["weekday", "start_time"]
+
+
+class GeneratedELearningTimetable(models.Model):
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "curriculum_generatedelearningtimetable"
+        ordering = ["-created_at"]
+
+
+class GeneratedELearningLesson(models.Model):
+    """Grade-level e-learning sessions (no class/stream branches)."""
+
+    generation = models.ForeignKey(
+        GeneratedELearningTimetable,
+        on_delete=models.DO_NOTHING,
+        related_name="lessons",
+        db_constraint=False,
+    )
+    academic_level = models.ForeignKey(
+        AcademicLevel,
+        on_delete=models.DO_NOTHING,
+        related_name="generated_elearning_lessons",
+        db_constraint=False,
+    )
+    learning_area = models.ForeignKey(
+        LearningArea,
+        on_delete=models.DO_NOTHING,
+        related_name="generated_elearning_lessons",
+        db_constraint=False,
+    )
+    teacher = models.ForeignKey(
+        Employee,
+        on_delete=models.DO_NOTHING,
+        related_name="generated_elearning_lessons",
+        db_constraint=False,
+    )
+    weekday = models.CharField(max_length=3)
+    period_name = models.CharField(max_length=120)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+
+    class Meta:
+        managed = False
+        db_table = "curriculum_generatedelearninglesson"
+        ordering = ["weekday", "start_time"]
+
+
+class ELearningSubjectAllocation(models.Model):
+    academic_level = models.ForeignKey(
+        AcademicLevel,
+        on_delete=models.DO_NOTHING,
+        related_name="elearning_subject_allocations",
+        db_constraint=False,
+    )
+    learning_area = models.ForeignKey(
+        LearningArea,
+        on_delete=models.DO_NOTHING,
+        related_name="elearning_allocations",
+        db_constraint=False,
+    )
+    teacher = models.ForeignKey(
+        Employee,
+        on_delete=models.DO_NOTHING,
+        related_name="elearning_subject_allocations",
+        db_constraint=False,
+    )
+
+    class Meta:
+        managed = False
+        db_table = "curriculum_elearningsubjectallocation"
+        ordering = [
+            "academic_level__order",
+            "learning_area__display_order",
+            "learning_area__name",
+        ]
+
+
+class ELearningLearningMaterial(models.Model):
+    class ContentFormat(models.TextChoices):
+        NOTES = "NOTES", "Notes/handouts (PDF)"
+        LECTURE_VIDEO = "LECTURE_VIDEO", "Lecture video (MP4)"
+        SLIDES = "SLIDES", "Slides (PDF or PPTX)"
+        QUIZ_SCORM = "QUIZ_SCORM", "Quizzes/interactive (SCORM package)"
+        AUDIO = "AUDIO", "Audio (MP3)"
+
+    allocation = models.ForeignKey(
+        ELearningSubjectAllocation,
+        on_delete=models.DO_NOTHING,
+        related_name="learning_materials",
+        db_constraint=False,
+    )
+    content_format = models.CharField(max_length=20)
+    category = models.CharField(max_length=120)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    cover_image = models.ImageField(upload_to="elearning/materials/covers/%Y/%m/", blank=True)
+    material_file = models.FileField(upload_to="elearning/materials/files/%Y/%m/")
+    original_filename = models.CharField(max_length=255, blank=True)
+    file_extension = models.CharField(max_length=12, blank=True)
+    file_size = models.PositiveBigIntegerField(default=0)
+    content_type = models.CharField(max_length=120, blank=True)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "curriculum_elearninglearningmaterial"
+        ordering = ["-created_at", "name"]
+
+    def get_content_format_display(self):
+        return dict(self.ContentFormat.choices).get(self.content_format, self.content_format)
+
+    @property
+    def human_file_size(self):
+        size = self.file_size or 0
+        if size < 1024:
+            return f"{size} B"
+        if size < 1024 * 1024:
+            return f"{size / 1024:.1f} KB"
+        return f"{size / (1024 * 1024):.1f} MB"
+
+
+class ELearningAttendanceSession(models.Model):
+    allocation = models.ForeignKey(
+        ELearningSubjectAllocation,
+        on_delete=models.DO_NOTHING,
+        related_name="attendance_sessions",
+        db_constraint=False,
+    )
+    lesson_date = models.DateField()
+    notes = models.TextField(blank=True)
+    taken_by = models.ForeignKey(
+        Employee,
+        on_delete=models.DO_NOTHING,
+        related_name="elearning_attendance_sessions",
+        db_constraint=False,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "curriculum_elearningattendancesession"
+        ordering = ["-lesson_date", "-updated_at"]
+
+
+class ELearningAttendanceRecord(models.Model):
+    class Status(models.TextChoices):
+        PRESENT = "PRESENT", "Present"
+        ABSENT = "ABSENT", "Absent"
+        LATE = "LATE", "Late"
+        EXCUSED = "EXCUSED", "Excused"
+
+    session = models.ForeignKey(
+        ELearningAttendanceSession,
+        on_delete=models.DO_NOTHING,
+        related_name="records",
+        db_constraint=False,
+    )
+    student = models.ForeignKey(
+        "portal.Student",
+        on_delete=models.DO_NOTHING,
+        related_name="elearning_attendance_records",
+        db_constraint=False,
+    )
+    status = models.CharField(max_length=10, default=Status.PRESENT)
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "curriculum_elearningattendancerecord"
+        ordering = ["student__last_name", "student__first_name"]
+
+    def get_status_display(self):
+        return dict(self.Status.choices).get(self.status, self.status)

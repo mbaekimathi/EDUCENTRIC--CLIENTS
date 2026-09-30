@@ -12,19 +12,82 @@
         <p class="page-hero__eyebrow">Online learning</p>
         <h2 class="page-hero__title">E-Learning</h2>
         <p class="page-hero__lede">
-          Open a subject portal for {{ student.display_name }}.
+          Grade timetable for {{ student.display_name }}{% if academic_level %} · {{ academic_level.name }}{% endif %}.
+          Class streams share the same grade schedule.
         </p>
       </div>
-      {% if subjects %}
+      {% if lesson_count or subjects %}
       <div class="page-hero__aside">
+        {% if lesson_count %}
+        <span class="page-hero__chip">{{ lesson_count }} session{{ lesson_count|pluralize }}</span>
+        {% endif %}
+        {% if subjects %}
         <span class="page-hero__chip">{{ subjects|length }} subject{{ subjects|length|pluralize }}</span>
+        {% endif %}
       </div>
       {% endif %}
     </div>
   </section>
 
+  {% if rows %}
+  <section class="portal-surface">
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Weekly e-learning timetable</h3>
+        <p class="portal-surface__lede">
+          Generated sessions for {% if academic_level %}{{ academic_level.name }}{% else %}this grade{% endif %}.
+        </p>
+      </div>
+    </header>
+    <div class="timetable-scroll">
+      <table class="timetable" aria-label="E-learning timetable">
+        <thead>
+          <tr>
+            <th scope="col" class="timetable__day">Day</th>
+            {% for period in periods %}
+            <th scope="col">
+              <span class="timetable__period">{{ period.name }}</span>
+              <span class="timetable__clock">{{ period.start|time:"H:i" }}–{{ period.end|time:"H:i" }}</span>
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <th scope="row" class="timetable__day">{{ row.label }}</th>
+            {% for lesson in row.cells %}
+            <td class="{% if lesson %}has-lesson{% else %}is-empty{% endif %}">
+              {% if lesson %}
+              <a
+                class="timetable__slot"
+                href="{% url 'portal:elearning_subject' lesson.learning_area_id %}"
+                title="{{ lesson.learning_area.name }}{% if lesson.teacher_id %} · {{ lesson.teacher.display_name }}{% endif %}"
+              >
+                <span class="timetable__code">{{ lesson.learning_area.code }}</span>
+                {% if lesson.teacher_id and lesson.teacher.short_name %}
+                <span class="timetable__teacher">{{ lesson.teacher.short_name }}</span>
+                {% endif %}
+              </a>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="portal-surface">
     {% if subjects %}
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Subjects</h3>
+        <p class="portal-surface__lede">Open a subject for sessions and published materials.</p>
+      </div>
+    </header>
     <ul class="divide-y divide-ink-950/8" role="list">
       {% for subject in subjects %}
       <li>
@@ -53,9 +116,13 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
         </svg>
       </span>
-      <p class="portal-empty__title">No e-learning subjects yet</p>
+      <p class="portal-empty__title">No e-learning yet</p>
       <p class="portal-empty__text">
-        Subjects enrolled for {{ student.display_name }} will appear here once they are linked in e-learning.
+        {% if not academic_level %}
+          We could not match {{ student.display_name }} to an academic grade yet.
+        {% else %}
+          A grade e-learning timetable has not been published for {{ academic_level.name }} yet.
+        {% endif %}
       </p>
     </div>
     {% endif %}

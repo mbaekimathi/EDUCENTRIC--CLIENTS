@@ -1,0 +1,298 @@
+{% extends "layouts/portal_app.html" %}
+
+{% block title %}E-Subject Attendance · {{ subject.name }} · {{ brand.school_display }}{% endblock %}
+{% block header_title %}E-Subject Attendance{% endblock %}
+
+{% block content %}
+<div class="anim-rise mx-auto max-w-6xl space-y-5">
+  <section class="page-hero">
+    <div class="page-hero__mesh" aria-hidden="true"></div>
+    <div class="page-hero__inner">
+      <div class="min-w-0">
+        <a
+          class="inline-flex items-center gap-1.5 text-sm font-medium text-white/80 transition hover:text-white"
+          href="{% url 'portal:elearning_subject' subject.pk %}"
+        >
+          <span aria-hidden="true">←</span> {{ subject.name }}
+        </a>
+        <p class="page-hero__eyebrow mt-3">Subject attendance</p>
+        <h2 class="page-hero__title">{{ subject.name }}</h2>
+        <p class="page-hero__lede">
+          Mark present or absent for
+          {% if academic_level %}{{ academic_level.name }}{% else %}this grade{% endif %}
+          · {{ subject.code }}
+          {% if allocation and allocation.teacher_id %} · {{ allocation.teacher.display_name }}{% endif %}
+        </p>
+      </div>
+      {% if attendance_roll %}
+      <div class="page-hero__aside">
+        <span class="page-hero__chip">{{ attendance_roll|length }} learner{{ attendance_roll|length|pluralize }}</span>
+        {% if attendance_taken %}
+        <span class="page-hero__chip">Taken {{ lesson_date|date:"j M Y" }}</span>
+        {% else %}
+        <span class="page-hero__chip">Not taken {{ lesson_date|date:"j M Y" }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if not can_mark_attendance %}
+  <section class="portal-surface">
+    <div class="portal-empty">
+      <span class="portal-empty__icon" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+      </span>
+      <p class="portal-empty__title">Subject not allocated</p>
+      <p class="portal-empty__text">
+        Attendance for {{ subject.name }} can be taken once the subject is allocated to this grade.
+      </p>
+    </div>
+  </section>
+  {% else %}
+  <section class="portal-surface">
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Pick a day</h3>
+        <p class="portal-surface__lede">
+          Select one date on the calendar. Green days already have attendance; open days still need marking.
+        </p>
+      </div>
+    </header>
+
+    <div class="ela-calendar-wrap p-4 sm:p-5">
+      <div class="ela-calendar">
+        <div class="ela-calendar__toolbar">
+          <a
+            class="ela-calendar__nav"
+            href="?date={{ lesson_date|date:'Y-m-d' }}&month={{ calendar_prev }}"
+            aria-label="Previous month"
+          >
+            ←
+          </a>
+          <div class="ela-calendar__title">
+            <strong>{{ calendar_label }}</strong>
+            <span>{{ taken_in_month_count }} of {{ days_in_month }} days taken</span>
+          </div>
+          <a
+            class="ela-calendar__nav"
+            href="?date={{ lesson_date|date:'Y-m-d' }}&month={{ calendar_next }}"
+            aria-label="Next month"
+          >
+            →
+          </a>
+        </div>
+
+        <div class="ela-calendar__weekdays" aria-hidden="true">
+          {% for label in calendar_weekday_labels %}
+          <span>{{ label }}</span>
+          {% endfor %}
+        </div>
+
+        <div class="ela-calendar__grid" role="grid" aria-label="Attendance calendar for {{ calendar_label }}">
+          {% for week in calendar_weeks %}
+          <div class="ela-calendar__week" role="row">
+            {% for day in week %}
+            <a
+              role="gridcell"
+              href="?date={{ day.iso }}&month={{ calendar_month|date:'Y-m' }}"
+              class="ela-calendar__day
+                {% if not day.in_month %}is-muted{% endif %}
+                {% if day.is_today %}is-today{% endif %}
+                {% if day.is_selected %}is-selected{% endif %}
+                {% if day.is_taken %}is-taken{% else %}is-open{% endif %}"
+              aria-label="{{ day.date|date:'j M Y' }}{% if day.is_taken %}, attendance taken{% else %}, attendance not taken{% endif %}{% if day.is_selected %}, selected{% endif %}"
+              {% if day.is_selected %}aria-current="date"{% endif %}
+            >
+              <span class="ela-calendar__day-num">{{ day.day }}</span>
+              <span class="ela-calendar__day-mark" aria-hidden="true"></span>
+            </a>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="ela-calendar__legend">
+          <span class="ela-legend"><i class="ela-legend__swatch is-taken"></i> Taken</span>
+          <span class="ela-legend"><i class="ela-legend__swatch is-open"></i> Not taken</span>
+          <span class="ela-legend"><i class="ela-legend__swatch is-selected"></i> Selected day</span>
+          <span class="ela-legend"><i class="ela-legend__swatch is-today"></i> Today</span>
+        </div>
+      </div>
+
+      <div class="ela-day-status {% if attendance_taken %}is-taken{% else %}is-open{% endif %}">
+        <p class="ela-day-status__eyebrow">Selected day</p>
+        <p class="ela-day-status__title">{{ lesson_date|date:"l, j F Y" }}</p>
+        <p class="ela-day-status__text">
+          {% if attendance_taken %}
+            Attendance has been taken for this day
+            {% if attendance_session %}· last saved {{ attendance_session.updated_at|date:"j M Y, H:i" }}{% endif %}.
+          {% else %}
+            Attendance has not been taken for this day yet. Mark the register below and save.
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section
+    class="portal-surface"
+    x-data="elearningAttendance({
+      present: {{ present_count }},
+      absent: {{ absent_count }},
+      total: {{ attendance_roll|length }}
+    })"
+  >
+    <header class="portal-surface__head">
+      <div>
+        <h3 class="portal-surface__title">Attendance register</h3>
+        <p class="portal-surface__lede">
+          {% if attendance_taken %}Updating{% else %}Taking{% endif %}
+          attendance for <strong class="font-semibold text-ink-950">{{ subject.name }}</strong>
+          on <strong class="font-semibold text-ink-950">{{ lesson_date|date:"j M Y" }}</strong>.
+        </p>
+      </div>
+      <span class="att-pill {% if attendance_taken %}is-present{% else %}is-absent{% endif %}">
+        {% if attendance_taken %}Taken{% else %}Not taken{% endif %}
+      </span>
+    </header>
+
+    <form method="post" class="space-y-4 p-4 sm:p-5" @change="recount()">
+      {% csrf_token %}
+      <input type="hidden" name="lesson_date" value="{{ lesson_date|date:'Y-m-d' }}">
+
+      <label class="block">
+        <span class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Notes</span>
+        <input
+          type="text"
+          name="attendance_notes"
+          value="{% if attendance_session %}{{ attendance_session.notes }}{% endif %}"
+          placeholder="Optional session notes…"
+          class="w-full rounded-xl border border-ink-950/10 bg-white px-3 py-2.5 text-sm text-ink-950 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+        >
+      </label>
+
+      {% if attendance_roll %}
+      <div class="ela-summary" aria-live="polite">
+        <div class="ela-summary__item is-present">
+          <strong x-text="present">{{ present_count }}</strong>
+          <span>Present</span>
+        </div>
+        <div class="ela-summary__item is-absent">
+          <strong x-text="absent">{{ absent_count }}</strong>
+          <span>Absent</span>
+        </div>
+        <div class="ela-summary__item">
+          <strong x-text="total">{{ attendance_roll|length }}</strong>
+          <span>Total</span>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="ela-action" @click="markAll('PRESENT')">Mark all present</button>
+        <button type="button" class="ela-action" @click="markAll('ABSENT')">Mark all absent</button>
+        <button type="submit" class="ela-action ela-action--primary ml-auto">Save attendance</button>
+      </div>
+
+      <div class="overflow-x-auto rounded-2xl border border-ink-950/8">
+        <table class="portal-table w-full min-w-[28rem] text-left text-sm">
+          <thead>
+            <tr>
+              <th class="w-12">#</th>
+              <th>Student</th>
+              <th class="w-[12rem]">Attendance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in attendance_roll %}
+            <tr>
+              <td class="text-ink-400">{{ forloop.counter }}</td>
+              <td>
+                <span class="block font-semibold text-ink-950">{{ row.student.display_name }}</span>
+                <span class="mt-0.5 block text-xs text-ink-400">
+                  {% if row.student.admission_number %}{{ row.student.admission_number }}{% else %}{{ row.student.assessment_number }}{% endif %}
+                  {% if row.student.class_group %} · {{ row.student.class_group }}{% endif %}
+                </span>
+              </td>
+              <td>
+                <div class="ela-toggle" role="group" aria-label="Attendance for {{ row.student.display_name }}">
+                  <label class="ela-toggle__option is-present">
+                    <input
+                      type="radio"
+                      name="status_{{ row.student.id }}"
+                      value="PRESENT"
+                      {% if row.status == "PRESENT" %}checked{% endif %}
+                      data-attendance-status
+                    >
+                    <span>Present</span>
+                  </label>
+                  <label class="ela-toggle__option is-absent">
+                    <input
+                      type="radio"
+                      name="status_{{ row.student.id }}"
+                      value="ABSENT"
+                      {% if row.status != "PRESENT" %}checked{% endif %}
+                      data-attendance-status
+                    >
+                    <span>Absent</span>
+                  </label>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="submit" class="ela-action ela-action--primary">Save attendance</button>
+        {% if attendance_session %}
+        <span class="text-xs text-ink-400">Last saved {{ attendance_session.updated_at|date:"j M Y, H:i" }}</span>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="portal-empty">
+        <span class="portal-empty__icon" aria-hidden="true">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </span>
+        <p class="portal-empty__title">No learners on this grade</p>
+        <p class="portal-empty__text">
+          There are no active students registered for
+          {% if academic_level %}{{ academic_level.name }}{% else %}this grade{% endif %} yet.
+        </p>
+      </div>
+      {% endif %}
+    </form>
+  </section>
+  {% endif %}
+</div>
+
+<script>
+  function elearningAttendance(initial) {
+    return {
+      present: initial.present || 0,
+      absent: initial.absent || 0,
+      total: initial.total || 0,
+      recount() {
+        const checked = this.$root.querySelectorAll("[data-attendance-status]:checked");
+        let present = 0;
+        checked.forEach((input) => {
+          if (input.value === "PRESENT") present += 1;
+        });
+        this.present = present;
+        this.absent = this.total - present;
+      },
+      markAll(status) {
+        this.$root.querySelectorAll(`[data-attendance-status][value="${status}"]`).forEach((input) => {
+          input.checked = true;
+        });
+        this.recount();
+      },
+    };
+  }
+</script>
+{% endblock %}
