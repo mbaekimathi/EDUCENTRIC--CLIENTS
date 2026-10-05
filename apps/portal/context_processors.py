@@ -5,6 +5,7 @@ from django.core.cache import cache
 
 from . import profile as portal_profile
 from . import session as portal_session
+from .cache_helpers import cache_get_or_set_locked
 from .models import SchoolProfile, Student
 
 # Portal chrome uses a fixed professional blue (school DB may still store another accent).
@@ -40,31 +41,36 @@ def _logo_url(logo_name):
     return f"{settings.MEDIA_URL.rstrip('/')}/{name}"
 
 
+def _load_school_branding():
+    profile = SchoolProfile.objects.only(
+        "official_name",
+        "display_name",
+        "motto",
+        "school_logo",
+    ).first()
+    if profile:
+        display = profile.display_name or profile.official_name or DEFAULT_BRAND["school_display"]
+        logo_url = _logo_url(profile.school_logo)
+        return {
+            "school_name": profile.official_name or DEFAULT_BRAND["school_name"],
+            "school_display": display,
+            "primary_color": PORTAL_BRAND_COLOR,
+            "motto": profile.motto or "",
+            "logo": profile.school_logo or "",
+            "logo_url": logo_url,
+            "brand_initials": _brand_initials(display),
+            "has_logo": bool(logo_url),
+        }
+    return DEFAULT_BRAND.copy()
+
+
 def portal_branding(request):
-    brand = cache.get("portal_school_branding_v3")
-    if brand is None:
-        profile = SchoolProfile.objects.only(
-            "official_name",
-            "display_name",
-            "motto",
-            "school_logo",
-        ).first()
-        if profile:
-            display = profile.display_name or profile.official_name or DEFAULT_BRAND["school_display"]
-            logo_url = _logo_url(profile.school_logo)
-            brand = {
-                "school_name": profile.official_name or DEFAULT_BRAND["school_name"],
-                "school_display": display,
-                "primary_color": PORTAL_BRAND_COLOR,
-                "motto": profile.motto or "",
-                "logo": profile.school_logo or "",
-                "logo_url": logo_url,
-                "brand_initials": _brand_initials(display),
-                "has_logo": bool(logo_url),
-            }
-        else:
-            brand = DEFAULT_BRAND.copy()
-        cache.set("portal_school_branding_v3", brand, 300)
+    brand_ttl = getattr(settings, "PORTAL_BRANDING_CACHE_SECONDS", 3600)
+    brand = cache_get_or_set_locked(
+        "portal_school_branding_v3",
+        _load_school_branding,
+        brand_ttl,
+    )
 
     siblings = []
     role = getattr(request, "portal_role", None)
@@ -73,13 +79,17 @@ def portal_branding(request):
         siblings_key = f"portal:siblings:{parent.pk}"
         siblings = cache.get(siblings_key)
         if siblings is None:
-            siblings = list(
-                Student.objects.filter(
+            siblings = [
+                {"id": row.pk, "display_name": row.display_name}
+                for row in Student.objects.filter(
                     parent_guardian_id=parent.pk,
                     is_suspended=False,
-                ).order_by("first_name", "last_name")
-            )
-            cache.set(siblings_key, siblings, 60)
+                )
+                .only("pk", "first_name", "last_name", "assessment_number")
+                .order_by("first_name", "last_name")
+            ]
+            siblings_ttl = getattr(settings, "PORTAL_SIBLINGS_CACHE_SECONDS", 300)
+            cache.set(siblings_key, siblings, siblings_ttl)
 
     student = getattr(request, "portal_student", None)
     return {

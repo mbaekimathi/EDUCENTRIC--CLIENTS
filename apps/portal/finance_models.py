@@ -301,17 +301,26 @@ def student_finance_balance(student_id: int) -> dict:
     }
 
 
-def student_finance_summary(student_id: int, *, limit: int = 100) -> dict:
-    charges = list(
+def student_finance_summary(student_id: int, *, limit: int | None = None) -> dict:
+    from django.conf import settings
+
+    if limit is None:
+        limit = getattr(settings, "PORTAL_FINANCE_LEDGER_LINES", 500)
+
+    charge_batch = list(
         FeeCharge.objects.filter(student_id=student_id)
         .select_related("category")
-        .order_by("-created_at")[:limit]
+        .order_by("-created_at")[: limit + 1]
     )
-    payments = list(
+    payment_batch = list(
         Payment.objects.filter(student_id=student_id)
         .select_related("charge", "charge__category")
-        .order_by("-received_at")[:limit]
+        .order_by("-received_at")[: limit + 1]
     )
+    charges_truncated = len(charge_batch) > limit
+    payments_truncated = len(payment_batch) > limit
+    charges = charge_batch[:limit]
+    payments = payment_batch[:limit]
     # Totals use the full ledger, not just the truncated lists shown in the UI.
     totals = student_finance_balance(student_id)
     return {
@@ -320,4 +329,8 @@ def student_finance_summary(student_id: int, *, limit: int = 100) -> dict:
         "total_charged": totals["total_charged"],
         "total_paid": totals["total_paid"],
         "balance": totals["balance"],
+        "ledger_truncated": charges_truncated or payments_truncated,
+        "charges_truncated": charges_truncated,
+        "payments_truncated": payments_truncated,
+        "ledger_limit": limit,
     }

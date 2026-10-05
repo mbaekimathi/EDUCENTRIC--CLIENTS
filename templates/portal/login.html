@@ -230,13 +230,23 @@
         }
       },
       async search() {
+        if (!this.query.trim()) {
+          this.results = seedStudents;
+          this.highlight = this.results.length ? 0 : -1;
+          this.error = '';
+          return;
+        }
         this.loading = true;
         this.error = '';
         try {
           const url = new URL(searchUrl, window.location.origin);
-          if (this.query.trim()) url.searchParams.set('q', this.query.trim());
+          url.searchParams.set('q', this.query.trim());
           const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
           const data = await res.json();
+          if (res.status === 429) {
+            this.error = data.error || 'Too many searches. Please wait a moment.';
+            return;
+          }
           this.results = data.results || [];
           this.highlight = this.results.length ? 0 : -1;
           if (this.selectedId && !this.results.some(r => r.id === this.selectedId)) {

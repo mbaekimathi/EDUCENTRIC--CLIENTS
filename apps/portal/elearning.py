@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from django.db import transaction
+from django.conf import settings
+from django.core.cache import cache
+from django.db import DatabaseError, OperationalError, transaction
 from django.utils import timezone
 
 from .curriculum_models import (
@@ -22,6 +24,26 @@ from .student_records import (
     _student_level_choice,
     academic_level_for_student,
 )
+
+
+class ElearningAttendanceBusy(Exception):
+    """Another save is in progress or the grade register is too large."""
+
+
+def _elearning_attendance_lock_key(allocation_id: int, lesson_date: date) -> str:
+    return f"elearning_att:{allocation_id}:{lesson_date.isoformat()}"
+
+
+def _elearning_learner_cap() -> int:
+    return getattr(settings, "PORTAL_ELEARNING_ATTENDANCE_MAX_LEARNERS", 600)
+
+
+def _elearning_lock_seconds() -> int:
+    return getattr(settings, "PORTAL_ELEARNING_ATTENDANCE_LOCK_SECONDS", 75)
+
+
+def elearning_attendance_grade_size(level) -> int:
+    return len(students_for_elearning_level(level))
 
 
 def _latest_generation_id_for_level(level_id: int) -> int | None:
@@ -189,13 +211,17 @@ def student_elearning_subject(student: Student, subject_id: int):
 
     materials = []
     sessions = []
+    materials_truncated = False
+    materials_limit = getattr(settings, "PORTAL_ELEARNING_MATERIALS_MAX", 100)
     if allocation is not None:
-        materials = list(
+        material_batch = list(
             ELearningLearningMaterial.objects.filter(
                 allocation_id=allocation.pk,
                 is_published=True,
-            ).order_by("-created_at", "name")
+            ).order_by("-created_at", "name")[: materials_limit + 1]
         )
+        materials_truncated = len(material_batch) > materials_limit
+        materials = material_batch[:materials_limit]
     generation_id = _latest_generation_id_for_level(level.pk)
     if generation_id is not None:
         for lesson in GeneratedELearningLesson.objects.filter(
@@ -220,6 +246,8 @@ def student_elearning_subject(student: Student, subject_id: int):
         "subject": subject,
         "allocation": allocation,
         "materials": materials,
+        "materials_truncated": materials_truncated,
+        "materials_limit": materials_limit,
         "sessions": sessions,
     }
 
@@ -382,7 +410,49 @@ def subject_attendance_roll(allocation, level, lesson_date: date, calendar_month
 @transaction.atomic
 def save_subject_attendance(allocation, level, lesson_date: date, notes: str, status_by_student: dict[int, str]):
     """Create/update the day's session and one record per learner on the grade."""
+    students = students_for_elearning_level(level)
+    cap = _elearning_learner_cap()
+    if len(students) > cap:
+        raise ElearningAttendanceBusy(
+            f"This grade has too many learners ({len(students)}) to save in one request. "
+            "Ask the school to split the register or try again later."
+        )
+
+    lock_key = _elearning_attendance_lock_key(allocation.pk, lesson_date)
+    if not cache.add(lock_key, 1, _elearning_lock_seconds()):
+        raise ElearningAttendanceBusy(
+            "Another attendance save is in progress for this subject and date. "
+            "Wait a moment and try again."
+        )
+
     now = timezone.now()
+    try:
+        return _save_subject_attendance_locked(
+            allocation,
+            level,
+            lesson_date,
+            notes,
+            status_by_student,
+            students,
+            now,
+        )
+    except (OperationalError, DatabaseError) as exc:
+        raise ElearningAttendanceBusy(
+            "The server is busy saving attendance. Wait a moment and try again."
+        ) from exc
+    finally:
+        cache.delete(lock_key)
+
+
+def _save_subject_attendance_locked(
+    allocation,
+    level,
+    lesson_date: date,
+    notes: str,
+    status_by_student: dict[int, str],
+    students: list[Student],
+    now,
+):
     session, created = ELearningAttendanceSession.objects.get_or_create(
         allocation_id=allocation.pk,
         lesson_date=lesson_date,
@@ -398,8 +468,9 @@ def save_subject_attendance(allocation, level, lesson_date: date, notes: str, st
         session.updated_at = now
         session.save(update_fields=["notes", "updated_at"])
 
-    students = students_for_elearning_level(level)
     student_ids = {learner.pk for learner in students}
+    allowed_ids = set(status_by_student.keys()) & student_ids
+    status_by_student = {sid: status_by_student[sid] for sid in allowed_ids}
     existing = {
         record.student_id: record
         for record in ELearningAttendanceRecord.objects.filter(session_id=session.pk)

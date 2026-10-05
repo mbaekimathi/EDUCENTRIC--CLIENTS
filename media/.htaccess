@@ -1,0 +1,11 @@
+# Serve uploads directly from Apache/LiteSpeed — do not bind a Passenger worker.
+PassengerEnabled Off
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  <FilesMatch "\.(?i:jpe?g|png|gif|webp|svg|ico)$">
+    Header set Cache-Control "public, max-age=2592000"
+  </FilesMatch>
+  <FilesMatch "\.(?i:pdf|mp4|webm|zip|pptx?)$">
+    Header set Cache-Control "public, max-age=86400"
+  </FilesMatch>
+</IfModule>

@@ -23,6 +23,12 @@
     </div>
   </section>
 
+  {% if history_truncated %}
+  <p class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+    Showing the latest {{ history_limit }} days only. Older attendance is omitted to keep the portal fast under load.
+  </p>
+  {% endif %}
+
   <section class="portal-surface">
     {% if records %}
     <div class="overflow-x-auto">

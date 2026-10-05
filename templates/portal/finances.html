@@ -206,6 +206,12 @@
     </div>
   </section>
 
+  {% if ledger_truncated %}
+  <p class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+    Fee history is capped at the latest {{ ledger_limit }} charges and {{ ledger_limit }} payments. Totals above still reflect the full account.
+  </p>
+  {% endif %}
+
   <details class="finance-reveal portal-surface">
     <summary class="finance-reveal__summary">
       <span class="finance-reveal__mark" aria-hidden="true">
@@ -366,6 +372,15 @@
   var initiateUrl = "{% url 'portal:finances_stk_initiate' %}";
   var statusUrlTpl = "{% url 'portal:finances_stk_status' stk_id=0 %}";
   var pollTimer = null;
+  var pollAttempt = 0;
+
+  function nextPollDelayMs() {
+    pollAttempt += 1;
+    if (pollAttempt <= 1) return 2000;
+    if (pollAttempt === 2) return 3200;
+    if (pollAttempt === 3) return 4400;
+    return Math.min(8000, 4400 + (pollAttempt - 3) * 1200);
+  }
   var busy = false;
   var canDismiss = false;
 
@@ -516,7 +531,7 @@
           "is-wait",
           ""
         );
-        schedulePoll(stkId, 2800);
+        schedulePoll(stkId, nextPollDelayMs());
       })
       .catch(function () {
         openModal(
@@ -526,7 +541,7 @@
           "is-wait",
           ""
         );
-        schedulePoll(stkId, 4000);
+        schedulePoll(stkId, nextPollDelayMs());
       });
   }
 
@@ -600,7 +615,10 @@
           "is-wait",
           ""
         );
-        if (stk.id) schedulePoll(stk.id, 2200);
+        if (stk.id) {
+          pollAttempt = 0;
+          schedulePoll(stk.id, 2000);
+        }
         else {
           setBusy(false);
           openModal(

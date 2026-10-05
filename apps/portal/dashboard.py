@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Max, Min, Prefetch, Q
 
@@ -292,6 +293,16 @@ def academic_calendar_timeline(
         reverse=True,
     )
 
+    max_upcoming = getattr(settings, "PORTAL_CALENDAR_MAX_UPCOMING", 50)
+    max_past = getattr(settings, "PORTAL_CALENDAR_MAX_PAST", 30)
+    calendar_truncated = False
+    if len(upcoming_events) > max_upcoming:
+        upcoming_events = upcoming_events[:max_upcoming]
+        calendar_truncated = True
+    if len(past_events) > max_past:
+        past_events = past_events[:max_past]
+        calendar_truncated = True
+
     return {
         "academic_year": year,
         "today": today,
@@ -299,6 +310,9 @@ def academic_calendar_timeline(
         "current_events": current_events,
         "upcoming_events": upcoming_events,
         "past_events": past_events,
+        "calendar_truncated": calendar_truncated,
+        "calendar_upcoming_limit": max_upcoming,
+        "calendar_past_limit": max_past,
         "counts": {
             "total": len(events),
             "current": len(current_events),

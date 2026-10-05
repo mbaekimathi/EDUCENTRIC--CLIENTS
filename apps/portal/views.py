@@ -1,11 +1,15 @@
+import time
+
 from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from .cache_helpers import release_portal_build_lock, try_portal_build_lock
 from . import dashboard as portal_dashboard
 from . import profile as portal_profile
 from . import session as portal_session
@@ -33,19 +37,48 @@ def _client_ip(request):
     return request.META.get("REMOTE_ADDR", "unknown")
 
 
-def _login_allowed(request):
-    """Simple cache-backed throttle to blunt credential stuffing / abuse."""
-    key = f"portal_login_rl:{_client_ip(request)}"
-    limit = getattr(settings, "PORTAL_LOGIN_RATE_LIMIT", 30)
-    window = getattr(settings, "PORTAL_LOGIN_RATE_WINDOW", 300)
+def _rate_limit_ok(scope: str, request, *, limit: int, window: int) -> bool:
+    key = f"{scope}:{_client_ip(request)}"
     try:
         hits = cache.incr(key)
     except ValueError:
         cache.add(key, 1, window)
         hits = 1
     else:
-        # Ensure TTL stays set when incr hits an existing key without expiry
-        # on backends that don't refresh TTL (LocMem / some Redis setups).
+        if hits == 1:
+            cache.set(key, hits, window)
+    return hits <= limit
+
+
+def _login_allowed(request):
+    """Simple cache-backed throttle to blunt credential stuffing / abuse."""
+    return _rate_limit_ok(
+        "portal_login_rl",
+        request,
+        limit=getattr(settings, "PORTAL_LOGIN_RATE_LIMIT", 30),
+        window=getattr(settings, "PORTAL_LOGIN_RATE_WINDOW", 300),
+    )
+
+
+def _student_search_allowed(request) -> bool:
+    return _rate_limit_ok(
+        "portal_search_rl",
+        request,
+        limit=getattr(settings, "PORTAL_STUDENT_SEARCH_RATE_LIMIT", 60),
+        window=getattr(settings, "PORTAL_STUDENT_SEARCH_RATE_WINDOW", 300),
+    )
+
+
+def _stk_initiate_allowed(request, parent_id: int) -> bool:
+    key = f"portal:stk_init:{parent_id}"
+    limit = getattr(settings, "PORTAL_STK_INITIATE_LIMIT", 5)
+    window = getattr(settings, "PORTAL_STK_INITIATE_WINDOW", 600)
+    try:
+        hits = cache.incr(key)
+    except ValueError:
+        cache.add(key, 1, window)
+        hits = 1
+    else:
         if hits == 1:
             cache.set(key, hits, window)
     return hits <= limit
@@ -57,6 +90,22 @@ def _eligible_students():
         .filter(is_suspended=False)
         .order_by("last_name", "first_name")
     )
+
+
+def _portal_busy_response(request, *, title: str, message: str, retry_name: str):
+    return render(
+        request,
+        "portal/server_busy.html",
+        {
+            "page_title": title,
+            "message": message,
+            "retry_url": reverse(retry_name),
+        },
+    )
+
+
+def _heavy_page_lock_seconds() -> int:
+    return getattr(settings, "PORTAL_HEAVY_PAGE_LOCK_SECONDS", 45)
 
 
 def _eligible_student_count() -> int:
@@ -127,7 +176,18 @@ def login_view(request):
 @require_GET
 def student_search(request):
     """JSON endpoint for the login picker — keeps the page light on mobile."""
+    if not _student_search_allowed(request):
+        return JsonResponse(
+            {"results": [], "error": "Too many searches. Please wait a few minutes."},
+            status=429,
+        )
     q = (request.GET.get("q") or "").strip()
+    min_len = getattr(settings, "PORTAL_STUDENT_SEARCH_MIN_LEN", 2)
+    max_results = getattr(settings, "PORTAL_STUDENT_SEARCH_MAX_RESULTS", 15)
+    if not q:
+        return JsonResponse({"results": []})
+    if len(q) < min_len:
+        return JsonResponse({"results": []})
     qs = _eligible_students()
     if q:
         # Prefer prefix matches (index-friendly) then fall back to contains.
@@ -155,7 +215,7 @@ def student_search(request):
             "class_group": s.class_group or "—",
             "parent": s.parent_guardian.full_name if s.parent_guardian_id else "—",
         }
-        for s in qs[:25]
+        for s in qs[:max_results]
     ]
     return JsonResponse({"results": results})
 
@@ -193,12 +253,22 @@ def attendance(request):
     student, denied = _portal_student_or_redirect(request)
     if denied:
         return denied
-    data = student_records.student_attendance(student)
-    return render(
-        request,
-        "portal/attendance.html",
-        {"student": student, **data},
-    )
+    if not try_portal_build_lock("attendance", student.pk, ttl=_heavy_page_lock_seconds()):
+        return _portal_busy_response(
+            request,
+            title="Attendance is loading",
+            message="Another attendance report is still building. Refresh in a few seconds.",
+            retry_name="portal:attendance",
+        )
+    try:
+        data = student_records.student_attendance(student)
+        return render(
+            request,
+            "portal/attendance.html",
+            {"student": student, **data},
+        )
+    finally:
+        release_portal_build_lock("attendance", student.pk)
 
 
 @portal_session.portal_login_required
@@ -221,42 +291,52 @@ def results(request):
     student, denied = _portal_student_or_redirect(request)
     if denied:
         return denied
-    data = student_records.student_results(student)
-    all_exams = data["exams"]
+    if not try_portal_build_lock("results", student.pk, ttl=_heavy_page_lock_seconds()):
+        return _portal_busy_response(
+            request,
+            title="Results are loading",
+            message="Another results report is still building. Refresh in a few seconds, or pick a single exam from the filter.",
+            retry_name="portal:results",
+        )
+    try:
+        data = student_records.student_results(student)
+        all_exams = data["exams"]
 
-    selected_raw = (request.GET.get("exam") or "all").strip()
-    selected_exam = "all"
-    visible_exams = all_exams
-    if selected_raw != "all":
-        try:
-            exam_id = int(selected_raw)
-        except (TypeError, ValueError):
-            exam_id = None
-        matched = [exam for exam in all_exams if exam["generation"].pk == exam_id]
-        if matched:
-            selected_exam = str(exam_id)
-            visible_exams = matched
+        selected_raw = (request.GET.get("exam") or "all").strip()
+        selected_exam = "all"
+        visible_exams = all_exams
+        if selected_raw != "all":
+            try:
+                exam_id = int(selected_raw)
+            except (TypeError, ValueError):
+                exam_id = None
+            matched = [exam for exam in all_exams if exam["generation"].pk == exam_id]
+            if matched:
+                selected_exam = str(exam_id)
+                visible_exams = matched
 
-    chart_source = visible_exams if selected_exam != "all" else all_exams
-    chart_data = student_records.results_chart_payload(
-        chart_source,
-        mode="all" if selected_exam == "all" else "exam",
-    )
-    comparison = student_records.results_comparison_table(visible_exams)
+        chart_source = visible_exams if selected_exam != "all" else all_exams
+        chart_data = student_records.results_chart_payload(
+            chart_source,
+            mode="all" if selected_exam == "all" else "exam",
+        )
+        comparison = student_records.results_comparison_table(visible_exams)
 
-    return render(
-        request,
-        "portal/results.html",
-        {
-            "student": student,
-            **data,
-            "exams": visible_exams,
-            "all_exams": all_exams,
-            "selected_exam": selected_exam,
-            "chart_data": chart_data,
-            "comparison": comparison,
-        },
-    )
+        return render(
+            request,
+            "portal/results.html",
+            {
+                "student": student,
+                **data,
+                "exams": visible_exams,
+                "all_exams": all_exams,
+                "selected_exam": selected_exam,
+                "chart_data": chart_data,
+                "comparison": comparison,
+            },
+        )
+    finally:
+        release_portal_build_lock("results", student.pk)
 
 
 @portal_session.portal_login_required
@@ -279,12 +359,22 @@ def academic_calendar(request):
     student, denied = _portal_student_or_redirect(request)
     if denied:
         return denied
-    data = portal_dashboard.academic_calendar_timeline(student=student)
-    return render(
-        request,
-        "portal/academic_calendar.html",
-        {"student": student, **data},
-    )
+    if not try_portal_build_lock("calendar", student.pk, ttl=_heavy_page_lock_seconds()):
+        return _portal_busy_response(
+            request,
+            title="Calendar is loading",
+            message="Another calendar view is still building. Refresh in a few seconds.",
+            retry_name="portal:academic_calendar",
+        )
+    try:
+        data = portal_dashboard.academic_calendar_timeline(student=student)
+        return render(
+            request,
+            "portal/academic_calendar.html",
+            {"student": student, **data},
+        )
+    finally:
+        release_portal_build_lock("calendar", student.pk)
 
 
 @portal_session.portal_login_required
@@ -293,27 +383,37 @@ def finances(request):
     student, denied = _portal_student_or_redirect(request)
     if denied:
         return denied
-    data = student_finance_summary(student.pk)
-    is_parent = (
-        request.portal_role == portal_session.ROLE_PARENT and request.portal_parent is not None
-    )
-    pay_ctx = (
-        portal_payments.parent_payment_context(
-            student=student, parent=request.portal_parent
+    if not try_portal_build_lock("finances", student.pk, ttl=_heavy_page_lock_seconds()):
+        return _portal_busy_response(
+            request,
+            title="Finances are loading",
+            message="Another fee statement is still building. Refresh in a few seconds.",
+            retry_name="portal:finances",
         )
-        if is_parent
-        else portal_payments.parent_payment_context(student=student, parent=None)
-    )
-    return render(
-        request,
-        "portal/finances.html",
-        {
-            "student": student,
-            "is_parent": is_parent,
-            **data,
-            **pay_ctx,
-        },
-    )
+    try:
+        data = student_finance_summary(student.pk)
+        is_parent = (
+            request.portal_role == portal_session.ROLE_PARENT and request.portal_parent is not None
+        )
+        pay_ctx = (
+            portal_payments.parent_payment_context(
+                student=student, parent=request.portal_parent
+            )
+            if is_parent
+            else portal_payments.parent_payment_context(student=student, parent=None)
+        )
+        return render(
+            request,
+            "portal/finances.html",
+            {
+                "student": student,
+                "is_parent": is_parent,
+                **data,
+                **pay_ctx,
+            },
+        )
+    finally:
+        release_portal_build_lock("finances", student.pk)
 
 
 @portal_session.portal_login_required
@@ -328,6 +428,15 @@ def finances_stk_initiate(request):
         return JsonResponse(
             {"ok": False, "error": "Only parents can send an M-Pesa payment prompt."},
             status=403,
+        )
+
+    if not _stk_initiate_allowed(request, request.portal_parent.pk):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Too many payment prompts sent recently. Wait a few minutes and try again.",
+            },
+            status=429,
         )
 
     try:
@@ -371,23 +480,30 @@ def finances_stk_status(request, stk_id):
     if student.parent_guardian_id != request.portal_parent.pk:
         return JsonResponse({"ok": False, "error": "Not allowed."}, status=403)
 
+    poll_key = f"portal:stk_poll:{stk.pk}:{request.portal_parent.pk}"
+    min_interval = getattr(settings, "PORTAL_STK_POLL_MIN_SECONDS", 2)
+    cached = cache.get(poll_key)
+    now = time.monotonic()
+    if cached and (now - cached.get("ts", 0)) < min_interval:
+        return JsonResponse(cached["body"])
+
     stk = portal_payments.refresh_stk_from_callback_logs(stk)
     payload = portal_payments.stk_request_payload(stk, include_finance=True)
     failed = stk.status in {
         StkPushRequest.Status.FAILED,
         StkPushRequest.Status.CANCELLED,
     }
-    return JsonResponse(
-        {
-            "ok": True,
-            "stk": payload,
-            "done": stk.status != StkPushRequest.Status.PENDING,
-            "failed": failed,
-            "success": (
-                stk.status == StkPushRequest.Status.SUCCESS and bool(stk.mpesa_receipt)
-            ),
-        }
-    )
+    body = {
+        "ok": True,
+        "stk": payload,
+        "done": stk.status != StkPushRequest.Status.PENDING,
+        "failed": failed,
+        "success": (
+            stk.status == StkPushRequest.Status.SUCCESS and bool(stk.mpesa_receipt)
+        ),
+    }
+    cache.set(poll_key, {"ts": now, "body": body}, 120)
+    return JsonResponse(body)
 
 
 @portal_session.portal_login_required
@@ -484,13 +600,20 @@ def elearning_subject_attendance(request, subject_id):
             except ValueError:
                 continue
             status_by_student[learner_id] = value
-        elearning_service.save_subject_attendance(
-            allocation=allocation,
-            level=level,
-            lesson_date=lesson_date,
-            notes=(request.POST.get("attendance_notes") or "").strip(),
-            status_by_student=status_by_student,
-        )
+        try:
+            elearning_service.save_subject_attendance(
+                allocation=allocation,
+                level=level,
+                lesson_date=lesson_date,
+                notes=(request.POST.get("attendance_notes") or "").strip(),
+                status_by_student=status_by_student,
+            )
+        except elearning_service.ElearningAttendanceBusy as exc:
+            messages.error(request, str(exc))
+            return redirect(
+                f"{request.path}?date={lesson_date.isoformat()}"
+                f"&month={lesson_date.strftime('%Y-%m')}"
+            )
         messages.success(
             request,
             f"Attendance saved for {data['subject'].name} · {lesson_date.strftime('%d %b %Y')}.",
@@ -503,10 +626,21 @@ def elearning_subject_attendance(request, subject_id):
     roll = elearning_service.subject_attendance_roll(
         allocation, level, lesson_date, calendar_month=calendar_month
     )
+    learner_cap = getattr(settings, "PORTAL_ELEARNING_ATTENDANCE_MAX_LEARNERS", 600)
+    grade_size = (
+        elearning_service.elearning_attendance_grade_size(level) if level is not None else 0
+    )
     return render(
         request,
         "portal/elearning_subject_attendance.html",
-        {"student": student, **data, **roll},
+        {
+            "student": student,
+            **data,
+            **roll,
+            "grade_size": grade_size,
+            "grade_oversized": grade_size > learner_cap,
+            "grade_learner_cap": learner_cap,
+        },
     )
 
 

@@ -24,6 +24,12 @@
     </div>
   </section>
 
+  {% if materials_truncated %}
+  <p class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+    Showing the latest {{ materials_limit }} published files. Older materials may be available from the teacher or school office.
+  </p>
+  {% endif %}
+
   <section class="portal-surface">
     {% if materials %}
     <header class="portal-surface__head">

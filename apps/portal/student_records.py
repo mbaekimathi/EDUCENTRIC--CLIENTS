@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 
+from django.conf import settings
 from django.core.cache import cache
 
 from .activity_models import StudentConductRecord
@@ -158,16 +159,20 @@ def _grade_for_percent(
 
 def student_attendance(
     student: Student,
-    limit: int = 60,
+    limit: int | None = None,
     *,
     include_class: bool = True,
     academic_class: AcademicClass | None = None,
 ):
-    records = list(
+    if limit is None:
+        limit = getattr(settings, "PORTAL_ATTENDANCE_MAX_DAYS", 90)
+    fetched = list(
         ClassAttendanceRecord.objects.filter(student=student)
         .select_related("session", "session__academic_class")
-        .order_by("-session__attendance_date", "-updated_at")[:limit]
+        .order_by("-session__attendance_date", "-updated_at")[: limit + 1]
     )
+    history_truncated = len(fetched) > limit
+    records = fetched[:limit]
     total_slots = 0
     present_slots = 0
     for record in records:
@@ -186,6 +191,8 @@ def student_attendance(
         "total_slots": total_slots,
         "attendance_rate": rate,
         "academic_class": resolved_class if include_class else None,
+        "history_truncated": history_truncated,
+        "history_limit": limit,
     }
 
 
@@ -253,10 +260,22 @@ def _build_exam_list(
     return exam_list
 
 
-def student_results(student: Student, *, max_exams: int | None = 12):
+def student_results(student: Student, *, max_exams: int | None = None):
     """Load exam marks. Caps to the newest ``max_exams`` generations (None = all)."""
+    if max_exams is None:
+        max_exams = getattr(settings, "PORTAL_RESULTS_MAX_EXAMS", 12)
     level = academic_level_for_student(student)
     bands = _bands_for_level(level)
+
+    from django.db.models import Max
+
+    total_exam_count = (
+        ExamMark.objects.filter(student=student)
+        .values("generation_id")
+        .distinct()
+        .count()
+    )
+    exams_truncated = max_exams is not None and total_exam_count > max_exams
 
     marks_qs = (
         ExamMark.objects.filter(student=student)
@@ -274,8 +293,6 @@ def student_results(student: Student, *, max_exams: int | None = 12):
     )
 
     if max_exams is not None:
-        from django.db.models import Max
-
         generation_ids = [
             row["generation_id"]
             for row in (
@@ -290,6 +307,9 @@ def student_results(student: Student, *, max_exams: int | None = 12):
                 "exams": [],
                 "academic_class": academic_class_for_student(student, level=level),
                 "level": level,
+                "exams_truncated": exams_truncated,
+                "total_exam_count": total_exam_count,
+                "results_exam_limit": max_exams,
             }
         marks_qs = marks_qs.filter(generation_id__in=generation_ids)
 
@@ -300,6 +320,9 @@ def student_results(student: Student, *, max_exams: int | None = 12):
         "exams": exam_list,
         "academic_class": academic_class_for_student(student, level=level),
         "level": level,
+        "exams_truncated": exams_truncated,
+        "total_exam_count": total_exam_count,
+        "results_exam_limit": max_exams,
     }
 
 

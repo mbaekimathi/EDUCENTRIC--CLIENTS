@@ -7,13 +7,12 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_DOWN
 
+from django.core.cache import cache
 from django.utils import timezone
 
 from .finance_models import DarajaSettings
 
 logger = logging.getLogger(__name__)
-
-_TOKEN_CACHE: dict = {"key": "", "token": "", "expires_at": None}
 
 
 class MpesaApiError(Exception):
@@ -90,15 +89,10 @@ def get_access_token(settings_obj: DarajaSettings | None = None) -> str:
     if not cfg["consumer_key"] or not cfg["consumer_secret"]:
         raise MpesaApiError("Daraja consumer key/secret are not configured.")
 
-    cache_key = _cache_token_key(settings_obj)
-    now = timezone.now()
-    if (
-        _TOKEN_CACHE.get("key") == cache_key
-        and _TOKEN_CACHE.get("token")
-        and _TOKEN_CACHE.get("expires_at")
-        and _TOKEN_CACHE["expires_at"] > now
-    ):
-        return _TOKEN_CACHE["token"]
+    cache_key = f"portal:daraja_token:{_cache_token_key(settings_obj)}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
 
     url = f"{settings_obj.api_base_url}/oauth/v1/generate?grant_type=client_credentials"
     payload = _http_json(
@@ -111,9 +105,7 @@ def get_access_token(settings_obj: DarajaSettings | None = None) -> str:
         raise MpesaApiError("Daraja did not return an access token.", payload=payload)
 
     expires_in = int(payload.get("expires_in") or 3599)
-    _TOKEN_CACHE["key"] = cache_key
-    _TOKEN_CACHE["token"] = token
-    _TOKEN_CACHE["expires_at"] = now + timedelta(seconds=max(60, expires_in - 60))
+    cache.set(cache_key, token, timeout=max(60, expires_in - 120))
     return token
 
 

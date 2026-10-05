@@ -1,0 +1,283 @@
+# Capacity & Overload Hardening Checklist — Educentric CLIENTS
+# (Parent & Student portal)
+#
+# Copy this into other parent/student portals. Goal: fewer timeouts, connection
+# resets, and 500s under concurrent parents/students on cPanel/Passenger
+# (or similar sync WSGI hosting).
+#
+# This app is mostly READ-heavy (results, attendance, timetable, finances) with
+# a few write paths (login, STK pay, profile photo, e-learning attendance).
+# It does NOT own exam mark sheets or IT health dashboards — those stay in
+# ADMINISTRATION. Adapt the “Do” items below to portal realities.
+# =============================================================================
+
+## 1) What to check first
+- [ ] How is the app deployed? (Passenger / Gunicorn / sync WSGI vs async)
+- [ ] Is cache LocMem? (bad on multi-worker hosts — CLIENTS currently falls
+      back to LocMem when REDIS_URL is blank)
+- [ ] Are sessions DB-only with frequent writes every request?
+      (cookie: edu_clients_sessionid; PortalSessionMiddleware loads parent/
+      student from session keys each request)
+- [ ] Does the app serve /media/ and large downloads itself?
+      (SERVE_MEDIA default True; logos + profile photos + e-learning PDFs)
+- [ ] Are heavy pages built unbounded inside the HTTP request?
+      (results charts, full-year attendance, timetable grids, finances statement)
+- [ ] Are bulk saves loading whole grades? (e-learning attendance: all learners
+      on a level → bulk_create / bulk_update)
+- [ ] Is STK status polled too fast from many parents at once?
+- [ ] Do context processors run heavy work on every page?
+      (portal_branding: school logo path check; parent siblings query — partially cached)
+- [ ] Production flags: DEBUG=False, safe DB connection reuse
+      (CLIENTS currently CONN_MAX_AGE=60 — prefer 0 on Passenger)
+
+Run a simple concurrent probe (parent login + student login + 2–3 heavy pages)
+at 10 / 20 / 40 users. Note:
+- OK %
+- p95 latency
+- connection resets / 504 / 500
+
+Suggested probe paths:
+  /                          (login)
+  /dashboard/
+  /results/
+  /attendance/
+  /timetable/
+  /finances/
+  /e-learning/
+
+# =============================================================================
+## 2) Changes that make the system faster and less crashy
+# =============================================================================
+
+### A. Shared cache + safer sessions (hosted / multi-worker)
+Problem: LocMem is per process. Workers don’t share cache; DB session writes
+storm under load. Login rate-limit and branding cache also break across workers.
+
+Do:
+- Prefer Redis cache + Redis/cache sessions if available
+  (KEY_PREFIX=edu_clients; distinct from admin/accounts)
+- If no Redis:
+  - Use FileBasedCache (shared on disk → tmp/django_cache/)
+  - Use SESSION_ENGINE = cached_db
+- Prefer LOCAL=False / HOSTED_* profile (or DEBUG=False) for hosted cache mode —
+  never leave LocMem in production with MaxPoolSize > 1
+- Avoid rewriting session on every request; only set keys on login / switch-student /
+  logout (CLIENTS mostly already does this — keep it that way)
+- Keep PORTAL_LOGIN_RATE_LIMIT backed by shared cache (LocMem = per-worker only)
+
+Don’t:
+- Use LocMem in production with multiple workers
+
+---
+
+### B. Stop serving uploads through the app
+Problem: Every logo / profile photo / e-learning PDF holds a worker for the
+whole transfer → pool exhaustion → random timeouts for other parents.
+
+Do:
+- Serve /media/ via Apache/Nginx
+- On cPanel/Passenger, put in media/.htaccess:
+
+```apache
+PassengerEnabled Off
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  <FilesMatch "\.(?i:jpe?g|png|gif|webp|svg|ico)$">
+    Header set Cache-Control "public, max-age=2592000"
+  </FilesMatch>
+  <FilesMatch "\.(?i:pdf|mp4|webm|zip|pptx?)$">
+    Header set Cache-Control "public, max-age=86400"
+  </FilesMatch>
+</IfModule>
+```
+
+- If MEDIA_ROOT points at ADMINISTRATION/media (shared logos), that tree must
+  also have PassengerEnabled Off — CLIENTS/media/.htaccess alone is not enough
+- Confirm /media/... loads without hitting Django, then set SERVE_MEDIA=False
+  (or HOSTED_SERVE_MEDIA=False)
+
+---
+
+### C. Compress large dynamic HTML
+Problem: Results / attendance / timetable / e-learning pages waste bandwidth
+and worker time.
+
+Do:
+- Enable gzip for dynamic responses (Django GZipMiddleware)
+- Prefer plain StaticFilesStorage on LiteSpeed/cPanel (CompressedStaticFilesStorage
+  .gz files often break CSS when the edge strips Content-Encoding)
+- Keep edge/Nginx compression for static assets
+
+---
+
+### D. Cap and lock heavy “read” builds (results / statements / calendars)
+Problem: One parent opening a huge results history or fee statement can pin a
+worker and slow everyone else. (CLIENTS has few PDF/Excel exports today —
+guard the HTML report builders the same way.)
+
+Do:
+- Cap exams / terms shown on results (e.g. latest N exams, or current year only)
+- Cap attendance rows / calendar range loaded per request
+- Cap finance ledger lines (e.g. 500–2000) with “narrow period” message
+- Optional: short per-user lock while a heavy page builds (cache lock, 30–60s)
+- try/except → friendly “server busy, try again” (never raw 500)
+- Prefer summary views + “load more” / term filters over dumping everything
+
+Don’t:
+- Build unbounded student history entirely in memory on the request path
+
+---
+
+### E. Harden e-learning attendance saves (CLIENTS bulk-write path)
+Problem: Saving a day’s register can load every learner on the grade, collide
+with another save, and timeout under load. (This is the portal analogue of
+admin “submit marks” — not exam sheets.)
+
+Do:
+- Scope reads/writes to this session + this level’s student IDs only
+- Cap learners per save (e.g. refuse if grade size > 400–800)
+- Short per-session lock (e.g. 60–90s): elearning_att:{allocation_id}:{date}
+- bulk_create / bulk_update only (already used — keep; avoid per-row save())
+- On DB/timeout errors: show “server busy, try again” and keep posted statuses
+- Don’t delete with giant OR chains — filter by session_id then exclude student_id__in
+
+Don’t:
+- Load attendance for the whole school just to save one subject day
+
+---
+
+### F. Lighten polling & “busy” endpoints (STK / search)
+Problem: Many parents paying fees at once can stampede STK status endpoints.
+There is no IT health page in CLIENTS — STK poll + student search are the
+closest overload sources.
+
+Do:
+- Back off STK poll (e.g. 2s → 3s → 4s+); stop when done/failed
+- Throttle Daraja query API server-side (already partially done in Accounts;
+  mirror in CLIENTS mpesa/payments)
+- Cap student_search results (e.g. 10–20) and require min query length
+- Cache eligible_student_count (already ~60s) — keep; use shared cache
+
+Don’t:
+- Poll STK every 500ms from the browser
+- Unbounded autocomplete against admissions_student
+
+---
+
+### G. Keep expensive work off every request
+Problem: Branding / siblings / avatars in context processors stampede after
+restart or under LocMem.
+
+Do:
+- Optimize profile images on upload/save, not on every page render
+  (CLIENTS portal_profile.store_profile_image — keep resize on save only)
+- Cache branding aggressively (e.g. 1 hour) + stampede lock
+- Cache parent siblings list (already 60s) — raise TTL if siblings rarely change
+- Avoid uncached DB in PortalSessionMiddleware beyond keyed session lookups
+- Prefer only() / select_related when hydrating session student/parent
+
+Don’t:
+- Stat/resize school logo or walk media on every template render
+
+---
+
+### H. Production / cPanel settings that matter
+
+```
+LOCAL=False                 # if you adopt ADMIN/ACCOUNTS env profile
+HOSTED_DEBUG=False          # or DEBUG=False
+DB_CONN_MAX_AGE=0           # Passenger/cPanel: avoid stale reused sockets
+SERVE_MEDIA=False           # after Apache/Nginx media is confirmed
+# REDIS_URL=redis://127.0.0.1:6379/1   # best upgrade if available
+# MEDIA_ROOT=/path/to/ADMINISTRATION/media   # if sharing logos
+```
+
+Passenger on ~16GB dedicated (example):
+- MaxPoolSize: 20–25
+- MinInstances: 2–4
+- Leave RAM for MySQL/OS (CLIENTS + ADMIN + ACCOUNTS may share the box)
+- After deploy: touch tmp/restart.txt
+- Ensure tmp/django_cache/ is writable by the app user
+- Startup file: passenger_wsgi.py · Entry point: application
+
+Static rebuild after storage backend change:
+  find staticfiles -name '*.gz' -delete
+  python manage.py collectstatic --noinput --clear
+  touch tmp/restart.txt
+
+# =============================================================================
+## 3) Expected outcomes
+# =============================================================================
+Before                              After
+Comfortable ~15–25 concurrent       Target ~30–40 concurrent (same box)
+Resets / 500s on big results page   Soft message / capped rows
+STK poll storm slows portal         Backed-off poll + shared cache
+Media steals workers                Apache/Nginx serves media
+LocMem branding/login rate-limit    Shared FileBased/Redis cache
+
+Core business logic stays the same. Only oversized/concurrent edge cases are
+refused or serialized on purpose.
+
+# =============================================================================
+## 4) What NOT to promise
+# =============================================================================
+- Unlimited disk does not increase concurrent parents/students
+- More RAM alone does not fix a ~RPS ceiling if requests are CPU-bound and sync
+- Huge multi-year results/statements still belong behind filters (or a later
+  background job) for true scale
+- CLIENTS shares MySQL with ADMINISTRATION/ACCOUNTS — one overloaded app can
+  still starve the others
+
+# =============================================================================
+## 5) Quick porting order (do in this sequence)
+# =============================================================================
+1. Shared cache + cached_db/Redis sessions (FileBasedCache when LOCAL=False)
+2. Media off the app (Apache/Nginx + SERVE_MEDIA=False)
+3. Cap heavy results / attendance / finance pages
+4. Lock + cap e-learning attendance saves
+5. Throttle STK poll + student search
+6. Remove/lighten work in portal_branding context processor
+7. Confirm production env flags + worker pool size + plain static storage + GZip
+8. Re-run concurrent probe and compare p95 / errors
+
+# =============================================================================
+## 6) Smoke test after applying
+# =============================================================================
+- [ ] Parent login + open dashboard / results / finances with 10–20 concurrent
+- [ ] Student login + attendance + timetable still fast
+- [ ] Switch child (parent) works; siblings list correct
+- [ ] STK fee payment: prompt → poll → success; cancel path OK
+- [ ] Export/open a normal e-learning PDF via /media/ (not via Django worker)
+- [ ] E-learning attendance: save a normal day successfully
+- [ ] Save the same attendance day twice quickly → second waits/retries, no crash
+- [ ] Huge results/finance history → clear “too large / narrow period” message
+- [ ] Profile photo upload: resize on save; pages stay fast afterward
+- [ ] Login rate-limit still works across workers (shared cache)
+
+# =============================================================================
+## 7) CLIENTS-specific map (current hotspots → checklist item)
+# =============================================================================
+config/settings.py          LocMem fallback, CONN_MAX_AGE=60, CompressedStatic,
+                            SERVE_MEDIA=True          → A, C, H
+config/urls.py              static(media) when SERVE_MEDIA → B
+apps/portal/context_processors.py  branding + siblings → G
+apps/portal/middleware.py   session hydrate each request → A, G
+apps/portal/views.py        results, finances, STK, search → D, F
+apps/portal/elearning.py    save_subject_attendance bulk → E
+apps/portal/profile.py      image store on upload → G
+templates/.../finances.html STK poll timers → F
+passenger_wsgi.py           deploy entrypoint → H
+
+# =============================================================================
+## 8) Overload guards to implement (checklist for code work)
+# =============================================================================
+- [x] FileBasedCache + cached_db when not Redis and not local
+- [x] media/.htaccess + SERVE_MEDIA=False after confirm (default SERVE_MEDIA=False when LOCAL=False)
+- [x] GZipMiddleware + plain StaticFilesStorage on cPanel (HOSTED profile)
+- [x] DB_CONN_MAX_AGE=0 on Passenger (default when LOCAL=False)
+- [x] Results / attendance / finances row or period caps
+- [x] E-learning attendance: learner cap + per-day cache lock + busy message
+- [x] STK poll backoff + server-side query throttle
+- [x] Branding cache TTL ↑ + stampede lock; siblings TTL OK
+- [x] load_probe management command (login + dashboard + results + finances)
+- [x] Optional LOCAL/HOSTED_*.env profile (match ADMINISTRATION / ACCOUNTS)

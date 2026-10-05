@@ -15,10 +15,18 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DEBUG=(bool, True),
+    LOCAL=(bool, False),
+    HOSTED_DEBUG=(bool, False),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
-DEBUG = env("DEBUG")
+# LOCAL=True → dev laptop (LocMem, optional Django /media/). LOCAL=False → cPanel/VPS.
+LOCAL = env.bool("LOCAL", default=env.bool("DEBUG", default=True))
+HOSTED = not LOCAL
+if HOSTED:
+    DEBUG = env.bool("HOSTED_DEBUG", default=env.bool("DEBUG", default=False))
+else:
+    DEBUG = env("DEBUG")
 SECRET_KEY = env("SECRET_KEY", default="")
 if not SECRET_KEY:
     if DEBUG:
@@ -27,6 +35,8 @@ if not SECRET_KEY:
         raise ImproperlyConfigured("Set SECRET_KEY in .env when DEBUG=False")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+if DEBUG and "testserver" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS = [*ALLOWED_HOSTS, "testserver"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # cPanel / Cloudflare / Nginx terminate SSL in front of the app.
@@ -46,6 +56,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    *(
+        ["django.middleware.gzip.GZipMiddleware"]
+        if env.bool("ENABLE_GZIP", default=HOSTED)
+        else []
+    ),
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -88,8 +103,10 @@ if _db_name:
             "PASSWORD": env("DB_PASSWORD", default=""),
             "HOST": env("DB_HOST", default="127.0.0.1"),
             "PORT": env("DB_PORT", default="3306"),
-            # Keep connections warm so concurrent portal users stay fast.
-            "CONN_MAX_AGE": 60,
+            "CONN_MAX_AGE": env.int(
+                "DB_CONN_MAX_AGE",
+                default=60 if LOCAL else 0,
+            ),
             "CONN_HEALTH_CHECKS": True,
             "OPTIONS": {
                 "charset": "utf8mb4",
@@ -122,12 +139,19 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_MANIFEST_STRICT = False
+_staticfiles_backend = (
+    "whitenoise.storage.CompressedStaticFilesStorage"
+    if env.bool("HOSTED_COMPRESSED_STATIC", default=False)
+    else "django.contrib.staticfiles.storage.StaticFilesStorage"
+    if HOSTED
+    else "whitenoise.storage.CompressedStaticFilesStorage"
+)
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+        "BACKEND": _staticfiles_backend,
     },
 }
 
@@ -142,8 +166,8 @@ elif _shared_admin_media.is_dir():
     MEDIA_ROOT = _shared_admin_media
 else:
     MEDIA_ROOT = _default_media
-# Serve uploaded media from Django by default (cPanel / shared hosting).
-SERVE_MEDIA = env.bool("SERVE_MEDIA", default=True)
+# On hosted servers prefer Apache/Nginx for /media/ (see media/.htaccess).
+SERVE_MEDIA = env.bool("SERVE_MEDIA", default=LOCAL)
 
 # Portal session keys (not Django auth users — students live in admissions_*).
 PORTAL_LOGIN_URL = "portal:login"
@@ -165,9 +189,7 @@ if _redis_url:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     SESSION_CACHE_ALIAS = "default"
-else:
-    # cPanel / single-worker Passenger: DB sessions are fine without Redis.
-    # Prefer REDIS_URL when running multiple workers so cache stays shared.
+elif LOCAL:
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -176,6 +198,19 @@ else:
         }
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.db"
+else:
+    _cache_dir = BASE_DIR / "tmp" / "django_cache"
+    _cache_dir.mkdir(parents=True, exist_ok=True)
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+            "LOCATION": str(_cache_dir),
+            "TIMEOUT": 300,
+            "OPTIONS": {"MAX_ENTRIES": 5000},
+        }
+    }
+    SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+    SESSION_CACHE_ALIAS = "default"
 
 SESSION_COOKIE_NAME = "edu_clients_sessionid"
 SESSION_COOKIE_HTTPONLY = True
@@ -198,3 +233,33 @@ SECURE_HSTS_PRELOAD = not DEBUG
 # Soft rate limit for portal login attempts (per IP).
 PORTAL_LOGIN_RATE_LIMIT = 30
 PORTAL_LOGIN_RATE_WINDOW = 300
+
+# Heavy read caps (see scripts/cpanel_capacity_checklist.txt).
+PORTAL_ATTENDANCE_MAX_DAYS = env.int("PORTAL_ATTENDANCE_MAX_DAYS", default=90)
+PORTAL_RESULTS_MAX_EXAMS = env.int("PORTAL_RESULTS_MAX_EXAMS", default=12)
+PORTAL_FINANCE_LEDGER_LINES = env.int("PORTAL_FINANCE_LEDGER_LINES", default=500)
+PORTAL_HEAVY_PAGE_LOCK_SECONDS = env.int("PORTAL_HEAVY_PAGE_LOCK_SECONDS", default=45)
+
+PORTAL_STUDENT_SEARCH_MIN_LEN = env.int("PORTAL_STUDENT_SEARCH_MIN_LEN", default=2)
+PORTAL_STUDENT_SEARCH_MAX_RESULTS = env.int("PORTAL_STUDENT_SEARCH_MAX_RESULTS", default=15)
+PORTAL_STUDENT_SEARCH_RATE_LIMIT = env.int("PORTAL_STUDENT_SEARCH_RATE_LIMIT", default=60)
+PORTAL_STUDENT_SEARCH_RATE_WINDOW = env.int("PORTAL_STUDENT_SEARCH_RATE_WINDOW", default=300)
+
+PORTAL_STK_POLL_MIN_SECONDS = env.int("PORTAL_STK_POLL_MIN_SECONDS", default=2)
+PORTAL_STK_INITIATE_LIMIT = env.int("PORTAL_STK_INITIATE_LIMIT", default=5)
+PORTAL_STK_INITIATE_WINDOW = env.int("PORTAL_STK_INITIATE_WINDOW", default=600)
+
+PORTAL_CALENDAR_MAX_UPCOMING = env.int("PORTAL_CALENDAR_MAX_UPCOMING", default=50)
+PORTAL_CALENDAR_MAX_PAST = env.int("PORTAL_CALENDAR_MAX_PAST", default=30)
+
+PORTAL_ELEARNING_MATERIALS_MAX = env.int("PORTAL_ELEARNING_MATERIALS_MAX", default=100)
+
+PORTAL_ELEARNING_ATTENDANCE_MAX_LEARNERS = env.int(
+    "PORTAL_ELEARNING_ATTENDANCE_MAX_LEARNERS", default=600
+)
+PORTAL_ELEARNING_ATTENDANCE_LOCK_SECONDS = env.int(
+    "PORTAL_ELEARNING_ATTENDANCE_LOCK_SECONDS", default=75
+)
+
+PORTAL_BRANDING_CACHE_SECONDS = env.int("PORTAL_BRANDING_CACHE_SECONDS", default=3600)
+PORTAL_SIBLINGS_CACHE_SECONDS = env.int("PORTAL_SIBLINGS_CACHE_SECONDS", default=300)

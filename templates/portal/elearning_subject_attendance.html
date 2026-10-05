@@ -37,6 +37,12 @@
     </div>
   </section>
 
+  {% if grade_oversized %}
+  <p class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+    This grade has {{ grade_size }} learners (limit {{ grade_learner_cap }}). Saving attendance is disabled until the register is split or the cap is raised.
+  </p>
+  {% endif %}
+
   {% if not can_mark_attendance %}
   <section class="portal-surface">
     <div class="portal-empty">

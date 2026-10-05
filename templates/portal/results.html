@@ -27,6 +27,12 @@
     </div>
   </section>
 
+  {% if exams_truncated %}
+  <p class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+    Showing the latest {{ results_exam_limit }} of {{ total_exam_count }} exams. Use the exam filter below to focus on one assessment.
+  </p>
+  {% endif %}
+
   {% if all_exams %}
   <section class="portal-surface px-5 py-4 sm:px-7">
     <form method="get" action="{% url 'portal:results' %}" class="results-filter">

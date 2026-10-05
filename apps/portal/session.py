@@ -58,7 +58,18 @@ def get_session_parent(request):
         return None
     # Portal access is by linked student, not the admin "is_active" flag
     # (that flag is for future credentialed parent accounts).
-    return ParentGuardian.objects.filter(pk=parent_id).first()
+    return (
+        ParentGuardian.objects.filter(pk=parent_id)
+        .only(
+            "pk",
+            "full_name",
+            "phone_number",
+            "email",
+            "relationship_to_student",
+            "profile_image",
+        )
+        .first()
+    )
 
 
 def portal_login_required(view_func):

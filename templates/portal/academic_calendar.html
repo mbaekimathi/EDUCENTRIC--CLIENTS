@@ -24,6 +24,12 @@
     </div>
   </section>
 
+  {% if calendar_truncated %}
+  <p class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+    Long activity lists are capped ({{ calendar_upcoming_limit }} upcoming, {{ calendar_past_limit }} past). Ask the school office for the full calendar if needed.
+  </p>
+  {% endif %}
+
   {% if has_activities %}
 
   {% if current_events %}
