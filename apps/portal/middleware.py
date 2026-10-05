@@ -1,17 +1,42 @@
 from django.conf import settings
 from django.contrib.sessions.exceptions import SessionInterrupted
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.shortcuts import redirect
 
 from . import session as portal_session
 
 
+def _clear_session_cookie(response):
+    response.delete_cookie(
+        settings.SESSION_COOKIE_NAME,
+        path=getattr(settings, "SESSION_COOKIE_PATH", "/"),
+        domain=getattr(settings, "SESSION_COOKIE_DOMAIN", None),
+        samesite=getattr(settings, "SESSION_COOKIE_SAMESITE", "Lax"),
+    )
+    return response
+
+
+class ResilientSessionMiddleware(SessionMiddleware):
+    """
+    SessionMiddleware that survives a mid-request session delete.
+
+    On cPanel, cached_db + FileBasedCache can serve a ghost session after
+    logout flushed the DB row. CSRF/messages then mark the session modified,
+    save() raises UpdateError, and Django turns that into SessionInterrupted.
+    Drop the stale cookie and return the already-built response instead.
+    """
+
+    def process_response(self, request, response):
+        try:
+            return super().process_response(request, response)
+        except SessionInterrupted:
+            return _clear_session_cookie(response)
+
+
 class SessionInterruptedMiddleware:
     """
-    Recover from a session deleted mid-request (concurrent logout / tab race).
-
-    Django raises SessionInterrupted when SessionMiddleware cannot UPDATE a
-    session row that another request already deleted. Without handling, users
-    see a 400 (or the debug page). Clear the stale cookie and send them to login.
+    Safety net outside SessionMiddleware for any SessionInterrupted that
+    still propagates (e.g. older deploys / unexpected raise sites).
     """
 
     def __init__(self, get_response):
@@ -21,14 +46,7 @@ class SessionInterruptedMiddleware:
         try:
             return self.get_response(request)
         except SessionInterrupted:
-            response = redirect(settings.PORTAL_LOGIN_URL)
-            response.delete_cookie(
-                settings.SESSION_COOKIE_NAME,
-                path=getattr(settings, "SESSION_COOKIE_PATH", "/"),
-                domain=getattr(settings, "SESSION_COOKIE_DOMAIN", None),
-                samesite=getattr(settings, "SESSION_COOKIE_SAMESITE", "Lax"),
-            )
-            return response
+            return _clear_session_cookie(redirect(settings.PORTAL_LOGIN_URL))
 
 
 class PortalSessionMiddleware:

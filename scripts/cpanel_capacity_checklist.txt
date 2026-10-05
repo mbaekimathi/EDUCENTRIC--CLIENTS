@@ -58,7 +58,7 @@ Do:
   (KEY_PREFIX=edu_clients; distinct from admin/accounts)
 - If no Redis:
   - Use FileBasedCache (shared on disk → tmp/django_cache/)
-  - Use SESSION_ENGINE = cached_db
+  - Use SESSION_ENGINE = db (not cached_db with FileBasedCache — ghost sessions)
 - Prefer LOCAL=False / HOSTED_* profile (or DEBUG=False) for hosted cache mode —
   never leave LocMem in production with MaxPoolSize > 1
 - Avoid rewriting session on every request; only set keys on login / switch-student /
@@ -231,7 +231,7 @@ refused or serialized on purpose.
 # =============================================================================
 ## 5) Quick porting order (do in this sequence)
 # =============================================================================
-1. Shared cache + cached_db/Redis sessions (FileBasedCache when LOCAL=False)
+1. Shared FileBasedCache for views + db sessions (Redis sessions when REDIS_URL set)
 2. Media off the app (Apache/Nginx + SERVE_MEDIA=False)
 3. Cap heavy results / attendance / finance pages
 4. Lock + cap e-learning attendance saves
@@ -271,7 +271,7 @@ passenger_wsgi.py           deploy entrypoint → H
 # =============================================================================
 ## 8) Overload guards to implement (checklist for code work)
 # =============================================================================
-- [x] FileBasedCache + cached_db when not Redis and not local
+- [x] FileBasedCache for views + db sessions when not Redis and not local
 - [x] media/.htaccess + SERVE_MEDIA=False after confirm (default SERVE_MEDIA=False when LOCAL=False)
 - [x] GZipMiddleware + plain StaticFilesStorage on cPanel (HOSTED profile)
 - [x] DB_CONN_MAX_AGE=0 on Passenger (default when LOCAL=False)

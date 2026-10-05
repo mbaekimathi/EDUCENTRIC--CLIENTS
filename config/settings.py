@@ -64,9 +64,10 @@ MIDDLEWARE = [
         else []
     ),
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    # Must wrap SessionMiddleware so process_response UpdateError is caught.
+    # Catch SessionInterrupted if it still escapes session middleware.
     "apps.portal.middleware.SessionInterruptedMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    # Handles UpdateError in process_response (stale cookie / ghost cache).
+    "apps.portal.middleware.ResilientSessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -203,6 +204,9 @@ elif LOCAL:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.db"
 else:
+    # File cache is fine for view/query caching, but NOT for sessions:
+    # cached_db + FileBasedCache can serve a ghost session after logout
+    # deleted the DB row, which triggers SessionInterrupted on the next save.
     _cache_dir = BASE_DIR / "tmp" / "django_cache"
     _cache_dir.mkdir(parents=True, exist_ok=True)
     CACHES = {
@@ -213,8 +217,7 @@ else:
             "OPTIONS": {"MAX_ENTRIES": 5000},
         }
     }
-    SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
-    SESSION_CACHE_ALIAS = "default"
+    SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 SESSION_COOKIE_NAME = "edu_clients_sessionid"
 SESSION_COOKIE_HTTPONLY = True
