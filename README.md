@@ -15,7 +15,7 @@ Django portal for parents and students. Reads the same MySQL database as
 ```bash
 pip install -r requirements.txt
 copy .env.example .env   # already matches shared DB settings
-python manage.py migrate --run-syncdb   # only creates missing Django session tables if needed
+python manage.py ensure_db            # migrations + session tables if missing (same as migrate --run-syncdb)
 python manage.py runserver 8001
 ```
 

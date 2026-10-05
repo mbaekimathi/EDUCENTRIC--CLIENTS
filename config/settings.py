@@ -18,7 +18,9 @@ env = environ.Env(
     LOCAL=(bool, False),
     HOSTED_DEBUG=(bool, False),
 )
-environ.Env.read_env(BASE_DIR / ".env")
+# overwrite=True: cPanel/Passenger may pre-set empty/stale vars that would
+# otherwise block .env (e.g. ALLOWED_HOSTS staying on localhost defaults).
+environ.Env.read_env(BASE_DIR / ".env", overwrite=True)
 
 # LOCAL=True → dev laptop (LocMem, optional Django /media/). LOCAL=False → cPanel/VPS.
 LOCAL = env.bool("LOCAL", default=env.bool("DEBUG", default=True))
