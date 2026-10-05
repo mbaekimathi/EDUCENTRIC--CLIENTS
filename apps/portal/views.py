@@ -223,7 +223,9 @@ def student_search(request):
 @require_POST
 @portal_session.portal_login_required
 def logout_view(request):
-    portal_session.clear_portal_session(request)
+    # flush() deletes the store entry and starts a new empty session for the
+    # sign-out message. Avoid mutating then flushing — concurrent tabs with the
+    # old cookie can otherwise hit SessionInterrupted on the next request.
     request.session.flush()
     messages.info(request, "You have been signed out.")
     return redirect(settings.PORTAL_LOGIN_URL)

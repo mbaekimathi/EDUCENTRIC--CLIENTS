@@ -64,6 +64,8 @@ MIDDLEWARE = [
         else []
     ),
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Must wrap SessionMiddleware so process_response UpdateError is caught.
+    "apps.portal.middleware.SessionInterruptedMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

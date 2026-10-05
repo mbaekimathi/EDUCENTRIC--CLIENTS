@@ -22,19 +22,21 @@ def clear_portal_session(request):
 
 
 def login_as_student(request, student: Student):
+    # Rotate key first (session fixation), then set identity on the new key.
+    request.session.cycle_key()
     clear_portal_session(request)
     request.session[SESSION_ROLE] = ROLE_STUDENT
     request.session[SESSION_STUDENT_ID] = student.pk
-    request.session.cycle_key()
 
 
 def login_as_parent(request, parent: ParentGuardian, student: Student | None = None):
+    # Rotate key first (session fixation), then set identity on the new key.
+    request.session.cycle_key()
     clear_portal_session(request)
     request.session[SESSION_ROLE] = ROLE_PARENT
     request.session[SESSION_PARENT_ID] = parent.pk
     if student is not None:
         request.session[SESSION_STUDENT_ID] = student.pk
-    request.session.cycle_key()
 
 
 def get_portal_role(request):
