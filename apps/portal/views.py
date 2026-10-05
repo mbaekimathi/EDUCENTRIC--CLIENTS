@@ -526,7 +526,7 @@ def _elearning_subject_or_redirect(request, subject_id):
         return None, None, denied
     data = elearning_service.student_elearning_subject(student, subject_id)
     if data is None:
-        messages.error(request, "That subject is not available for this learner’s grade.")
+        messages.error(request, "That subject is not available for this learner’s level.")
         return None, None, redirect("portal:elearning")
     return student, data, None
 

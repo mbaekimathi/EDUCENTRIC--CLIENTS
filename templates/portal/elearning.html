@@ -12,8 +12,8 @@
         <p class="page-hero__eyebrow">Online learning</p>
         <h2 class="page-hero__title">E-Learning</h2>
         <p class="page-hero__lede">
-          Grade timetable for {{ student.display_name }}{% if academic_level %} · {{ academic_level.name }}{% endif %}.
-          Class streams share the same grade schedule.
+          Year timetable for {{ student.display_name }}{% if academic_level %} · {{ academic_level.name }}{% endif %}.
+          Programme cohorts on the same level share this schedule.
         </p>
       </div>
       {% if lesson_count or subjects %}
@@ -35,7 +35,7 @@
       <div>
         <h3 class="portal-surface__title">Weekly e-learning timetable</h3>
         <p class="portal-surface__lede">
-          Generated sessions for {% if academic_level %}{{ academic_level.name }}{% else %}this grade{% endif %}.
+          Generated sessions for {% if academic_level %}{{ academic_level.name }}{% else %}this level{% endif %}.
         </p>
       </div>
     </header>
@@ -119,9 +119,9 @@
       <p class="portal-empty__title">No e-learning yet</p>
       <p class="portal-empty__text">
         {% if not academic_level %}
-          We could not match {{ student.display_name }} to an academic grade yet.
+          We could not match {{ student.display_name }} to an academic level yet.
         {% else %}
-          A grade e-learning timetable has not been published for {{ academic_level.name }} yet.
+          An e-learning timetable has not been published for {{ academic_level.name }} yet.
         {% endif %}
       </p>
     </div>

@@ -19,7 +19,7 @@
         <h2 class="page-hero__title">{{ subject.name }}</h2>
         <p class="page-hero__lede">
           Mark present or absent for
-          {% if academic_level %}{{ academic_level.name }}{% else %}this grade{% endif %}
+          {% if academic_level %}{{ academic_level.name }}{% else %}this level{% endif %}
           · {{ subject.code }}
           {% if allocation and allocation.teacher_id %} · {{ allocation.teacher.display_name }}{% endif %}
         </p>
@@ -39,7 +39,7 @@
 
   {% if grade_oversized %}
   <p class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
-    This grade has {{ grade_size }} learners (limit {{ grade_learner_cap }}). Saving attendance is disabled until the register is split or the cap is raised.
+    This level has {{ grade_size }} learners (limit {{ grade_learner_cap }}). Saving attendance is disabled until the register is split or the cap is raised.
   </p>
   {% endif %}
 
@@ -53,7 +53,7 @@
       </span>
       <p class="portal-empty__title">Subject not allocated</p>
       <p class="portal-empty__text">
-        Attendance for {{ subject.name }} can be taken once the subject is allocated to this grade.
+        Attendance for {{ subject.name }} can be taken once the subject is allocated to this level.
       </p>
     </div>
   </section>
@@ -265,10 +265,10 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
         </span>
-        <p class="portal-empty__title">No learners on this grade</p>
+        <p class="portal-empty__title">No learners on this level</p>
         <p class="portal-empty__text">
           There are no active students registered for
-          {% if academic_level %}{{ academic_level.name }}{% else %}this grade{% endif %} yet.
+          {% if academic_level %}{{ academic_level.name }}{% else %}this level{% endif %} yet.
         </p>
       </div>
       {% endif %}
